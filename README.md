@@ -105,6 +105,16 @@ Prompts are loaded from:
 
 Naming format is `prompt_<name>.txt`, used as `llm-cli <name>`.
 
+Set the default prompt for new chats in `~/.config/llm_cli/config.json`:
+
+```json
+{
+  "default_prompt": "concise"
+}
+```
+
+An explicit positional prompt still wins, for example `llm-cli general`.
+
 ## Development
 
 ```bash
