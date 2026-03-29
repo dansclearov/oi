@@ -14,7 +14,6 @@ from llm_cli.llm_types import ChatOptions, ModelCapabilities
 from llm_cli.registry import ModelRegistry
 from llm_cli.response_handler import ResponseHandler
 
-DEFAULT_ANTHROPIC_THINKING_BUDGET = 2048
 MAX_CHAT_ATTEMPTS = 3
 RETRY_WAIT_MIN_SECONDS = 4
 RETRY_WAIT_MAX_SECONDS = 10
@@ -67,10 +66,7 @@ class LLMClient:
             elif provider_name == "anthropic":
                 model_settings.setdefault(
                     "anthropic_thinking",
-                    {
-                        "type": "enabled",
-                        "budget_tokens": DEFAULT_ANTHROPIC_THINKING_BUDGET,
-                    },
+                    {"type": "adaptive"},
                 )
             elif provider_name in {"google-gla", "google-vertex"}:
                 model_settings.setdefault(

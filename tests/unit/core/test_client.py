@@ -171,3 +171,53 @@ class TestLLMClient:
         )
 
         assert captured["model_settings"]["max_tokens"] == 12000
+
+    def test_chat_defaults_anthropic_thinking_to_adaptive(self, monkeypatch):
+        registry = Mock()
+        registry.get_provider_for_model.return_value = ("anthropic", "claude-sonnet")
+        registry.get_model_capabilities.return_value = ModelCapabilities(
+            supports_thinking=True
+        )
+        client = LLMClient(registry)
+        captured = {}
+        response = ModelResponse(parts=[TextPart(content="ok")])
+
+        def fake_stream(
+            model_name, model_messages, model_settings, request_parameters, handler
+        ):
+            captured["model_settings"] = model_settings
+            return response
+
+        monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_stream)
+
+        client.chat([], "sonnet", ChatOptions(silent=True))
+
+        assert captured["model_settings"]["anthropic_thinking"] == {"type": "adaptive"}
+
+    def test_chat_keeps_configured_anthropic_thinking_override(self, monkeypatch):
+        registry = Mock()
+        registry.get_provider_for_model.return_value = ("anthropic", "claude-haiku")
+        registry.get_model_capabilities.return_value = ModelCapabilities(
+            supports_thinking=True,
+            extra_params={
+                "anthropic_thinking": {"type": "enabled", "budget_tokens": 2048}
+            },
+        )
+        client = LLMClient(registry)
+        captured = {}
+        response = ModelResponse(parts=[TextPart(content="ok")])
+
+        def fake_stream(
+            model_name, model_messages, model_settings, request_parameters, handler
+        ):
+            captured["model_settings"] = model_settings
+            return response
+
+        monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_stream)
+
+        client.chat([], "haiku", ChatOptions(silent=True))
+
+        assert captured["model_settings"]["anthropic_thinking"] == {
+            "type": "enabled",
+            "budget_tokens": 2048,
+        }
