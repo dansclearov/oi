@@ -11,14 +11,17 @@ anthropic:
   claude-sonnet-4-6:
     supports_search: true
     supports_thinking: true
+    max_tokens: 128000
     extra_params:
       anthropic_thinking: {type: adaptive}
   claude-haiku-4-5:
     supports_search: true
     supports_thinking: true
+    max_tokens: 64000
   claude-opus-4-6:
     supports_search: true
     supports_thinking: true
+    max_tokens: 128000
     extra_params:
       anthropic_thinking: {type: adaptive}
 

@@ -101,6 +101,7 @@ class TestModelRegistry:
             capabilities = registry.get_model_capabilities("alias")
             assert capabilities.supports_search is True
             assert capabilities.supports_thinking is False
+            assert capabilities.max_tokens is None
             mock_caps.assert_called_once_with("provider", "model")
 
     def test_get_model_capabilities_accepts_resolved_model_name(self):
@@ -112,12 +113,13 @@ class TestModelRegistry:
                 {"alias": ("provider", "model")},
                 "alias",
             )
-            mock_caps.return_value = {"supports_thinking": True}
+            mock_caps.return_value = {"supports_thinking": True, "max_tokens": 16384}
 
             registry = ModelRegistry()
             capabilities = registry.get_model_capabilities("provider:model")
             assert capabilities.supports_search is False
             assert capabilities.supports_thinking is True
+            assert capabilities.max_tokens == 16384
             mock_caps.assert_called_once_with("provider", "model")
 
     def test_has_model_config_returns_true_for_configured_model(self):

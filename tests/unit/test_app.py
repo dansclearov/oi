@@ -168,6 +168,48 @@ def test_run_chat_loop_discards_user_message_on_request_error():
     assert current_chat.messages == []
 
 
+def test_run_chat_loop_warns_when_response_hits_output_limit(capsys):
+    metadata = ChatMetadata(
+        id="test-chat-length-stop",
+        title="Chat 2026-02-14 00:00",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        model="sonnet",
+        message_count=0,
+    )
+    current_chat = Chat(metadata=metadata)
+
+    chat_manager = Mock()
+    llm_client = Mock()
+    llm_client.chat.return_value = ModelResponse(
+        parts=[TextPart(content="truncated")],
+        finish_reason="length",
+    )
+    input_handler = Mock()
+    input_handler.get_user_input.side_effect = ["Hello", KeyboardInterrupt()]
+    config = Config()
+
+    run_chat_loop(
+        current_chat=current_chat,
+        chat_manager=chat_manager,
+        llm_client=llm_client,
+        input_handler=input_handler,
+        chat_options=ChatOptions(),
+        prompt_str="You are helpful.",
+        config=config,
+        active_model="sonnet",
+    )
+
+    assert (
+        ansi_message(
+            WARNING_LABEL,
+            "Response hit the model output limit. Set `max_tokens` for this model "
+            "in models.yaml if you want longer replies.",
+        )
+        in capsys.readouterr().out
+    )
+
+
 def test_handle_local_command_toggles_bookmark_for_saved_chat():
     metadata = ChatMetadata(
         id="test-chat-bookmark",

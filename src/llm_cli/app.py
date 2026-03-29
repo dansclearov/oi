@@ -15,7 +15,7 @@ from llm_cli.constants import (
     MAX_TITLE_LENGTH,
     MIN_MESSAGES_FOR_SMART_TITLE,
 )
-from pydantic_ai.messages import ModelMessage, ModelRequest
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
 
 from llm_cli.core.chat_manager import ChatManager
 from llm_cli.core.client import LLMClient
@@ -264,6 +264,20 @@ def _maybe_generate_smart_title(
         chat_manager.generate_smart_title(current_chat, llm_client, active_model)
 
 
+def _warn_if_response_hit_output_limit(model_response: ModelResponse) -> None:
+    """Surface provider-side output truncation so it isn't mistaken for UI cutoff."""
+    if model_response.finish_reason != "length":
+        return
+
+    print(
+        ansi_message(
+            WARNING_LABEL,
+            "Response hit the model output limit. Set `max_tokens` for this model "
+            "in models.yaml if you want longer replies.",
+        )
+    )
+
+
 def run_chat_loop(
     current_chat: Chat,
     chat_manager: ChatManager,
@@ -323,6 +337,7 @@ def run_chat_loop(
                 continue
 
             current_chat.append_assistant_response(model_response)
+            _warn_if_response_hit_output_limit(model_response)
             pending_user_message = False
 
             _update_title_from_first_user_message(current_chat)

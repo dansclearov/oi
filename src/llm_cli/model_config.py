@@ -20,6 +20,15 @@ def clear_model_capabilities_cache() -> None:
     load_model_capabilities.cache_clear()
 
 
+def _normalize_max_tokens(value: Any) -> int | None:
+    """Return a positive integer max_tokens value when configured."""
+    if not isinstance(value, int):
+        return None
+    if value <= 0:
+        return None
+    return value
+
+
 def get_model_capabilities(provider_name: str, model_id: str) -> Dict[str, Any]:
     """Get capabilities for a specific model with defaults."""
     config = load_model_capabilities()
@@ -34,5 +43,6 @@ def get_model_capabilities(provider_name: str, model_id: str) -> Dict[str, Any]:
     return {
         "supports_search": model_config.get("supports_search", False),
         "supports_thinking": model_config.get("supports_thinking", False),
+        "max_tokens": _normalize_max_tokens(model_config.get("max_tokens")),
         "extra_params": dict(safe_extra_params),
     }

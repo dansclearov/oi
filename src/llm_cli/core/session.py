@@ -74,6 +74,7 @@ class ChatMetadata:
         self.model_capabilities_snapshot = {
             "supports_search": bool(capabilities.supports_search),
             "supports_thinking": bool(capabilities.supports_thinking),
+            "max_tokens": capabilities.max_tokens,
             "extra_params": copy.deepcopy(capabilities.extra_params),
         }
 
@@ -90,6 +91,7 @@ class ChatMetadata:
         return ModelCapabilities(
             supports_search=bool(raw.get("supports_search", False)),
             supports_thinking=bool(raw.get("supports_thinking", False)),
+            max_tokens=raw.get("max_tokens"),
             extra_params=safe_extra_params,
         )
 

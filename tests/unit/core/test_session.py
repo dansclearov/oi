@@ -49,6 +49,7 @@ class TestChatMetadata:
             ModelCapabilities(
                 supports_search=True,
                 supports_thinking=True,
+                max_tokens=8192,
                 extra_params={"foo": {"bar": 1}},
             )
         )
@@ -61,6 +62,7 @@ class TestChatMetadata:
         assert data["bookmarked"] is False
         assert data["model_capabilities_snapshot"]["supports_search"] is True
         assert data["model_capabilities_snapshot"]["supports_thinking"] is True
+        assert data["model_capabilities_snapshot"]["max_tokens"] == 8192
         assert data["model_capabilities_snapshot"]["extra_params"] == {
             "foo": {"bar": 1}
         }
@@ -81,6 +83,7 @@ class TestChatMetadata:
             "model_capabilities_snapshot": {
                 "supports_search": True,
                 "supports_thinking": False,
+                "max_tokens": 4096,
                 "extra_params": {"temperature": 0.2},
             },
         }
@@ -96,6 +99,7 @@ class TestChatMetadata:
         assert snapshot is not None
         assert snapshot.supports_search is True
         assert snapshot.supports_thinking is False
+        assert snapshot.max_tokens == 4096
         assert snapshot.extra_params == {"temperature": 0.2}
         assert not hasattr(metadata, "preview")
 

@@ -56,6 +56,8 @@ class LLMClient:
 
         # Start with extra_params from model config, then override with request-specific settings
         model_settings = dict(capabilities.extra_params)
+        if capabilities.max_tokens is not None:
+            model_settings.setdefault("max_tokens", capabilities.max_tokens)
         model_settings.update(effective_options.extra_settings)
 
         if effective_options.enable_thinking:

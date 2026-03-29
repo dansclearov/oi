@@ -60,6 +60,7 @@ class ModelRegistry:
         return ModelCapabilities(
             supports_search=bool(raw_caps.get("supports_search", False)),
             supports_thinking=bool(raw_caps.get("supports_thinking", False)),
+            max_tokens=raw_caps.get("max_tokens"),
             extra_params=raw_caps.get("extra_params", {}),
         )
 

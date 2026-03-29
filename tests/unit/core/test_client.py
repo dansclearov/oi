@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import Mock
+from pydantic_ai.messages import ModelResponse, TextPart
 
 from llm_cli.core.client import LLMClient
 from llm_cli.llm_types import ChatOptions, ModelCapabilities
@@ -119,3 +120,54 @@ class TestLLMClient:
 
         assert resolved is override
         registry.get_model_capabilities.assert_not_called()
+
+    def test_chat_applies_configured_max_tokens_to_model_settings(self, monkeypatch):
+        registry = Mock()
+        registry.get_provider_for_model.return_value = ("anthropic", "claude-sonnet")
+        registry.get_model_capabilities.return_value = ModelCapabilities(
+            max_tokens=8192
+        )
+        client = LLMClient(registry)
+        captured = {}
+        response = ModelResponse(parts=[TextPart(content="ok")])
+
+        def fake_stream(
+            model_name, model_messages, model_settings, request_parameters, handler
+        ):
+            captured["model_name"] = model_name
+            captured["model_settings"] = model_settings
+            return response
+
+        monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_stream)
+
+        result = client.chat([], "sonnet", ChatOptions(silent=True))
+
+        assert result is response
+        assert captured["model_name"] == "anthropic:claude-sonnet"
+        assert captured["model_settings"]["max_tokens"] == 8192
+
+    def test_chat_request_overrides_configured_max_tokens(self, monkeypatch):
+        registry = Mock()
+        registry.get_provider_for_model.return_value = ("anthropic", "claude-sonnet")
+        registry.get_model_capabilities.return_value = ModelCapabilities(
+            max_tokens=8192
+        )
+        client = LLMClient(registry)
+        captured = {}
+        response = ModelResponse(parts=[TextPart(content="ok")])
+
+        def fake_stream(
+            model_name, model_messages, model_settings, request_parameters, handler
+        ):
+            captured["model_settings"] = model_settings
+            return response
+
+        monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_stream)
+
+        client.chat(
+            [],
+            "sonnet",
+            ChatOptions(silent=True, extra_settings={"max_tokens": 12000}),
+        )
+
+        assert captured["model_settings"]["max_tokens"] == 12000

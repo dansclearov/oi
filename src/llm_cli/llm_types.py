@@ -10,6 +10,7 @@ class ModelCapabilities:
 
     supports_search: bool = False
     supports_thinking: bool = False
+    max_tokens: int | None = None
     extra_params: Dict[str, Any] = field(default_factory=dict)
 
 

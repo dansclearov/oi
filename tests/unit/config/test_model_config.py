@@ -42,6 +42,7 @@ def test_get_model_capabilities_copies_extra_params():
                     "model": {
                         "extra_params": {"foo": "bar"},
                         "supports_search": True,
+                        "max_tokens": 8192,
                     }
                 }
             },
@@ -49,10 +50,31 @@ def test_get_model_capabilities_copies_extra_params():
             caps = get_model_capabilities("provider", "model")
 
             assert caps["supports_search"] is True
+            assert caps["max_tokens"] == 8192
             assert caps["extra_params"] == {"foo": "bar"}
             caps["extra_params"]["foo"] = "changed"
 
             caps_again = get_model_capabilities("provider", "model")
             assert caps_again["extra_params"] == {"foo": "bar"}
+    finally:
+        clear_model_capabilities_cache()
+
+
+def test_get_model_capabilities_ignores_invalid_max_tokens():
+    clear_model_capabilities_cache()
+    try:
+        with patch(
+            "llm_cli.model_config.load_model_capabilities",
+            return_value={
+                "provider": {
+                    "model": {
+                        "max_tokens": 0,
+                    }
+                }
+            },
+        ):
+            caps = get_model_capabilities("provider", "model")
+
+            assert caps["max_tokens"] is None
     finally:
         clear_model_capabilities_cache()
