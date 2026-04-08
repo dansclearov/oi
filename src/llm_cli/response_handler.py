@@ -130,12 +130,9 @@ class ResponseHandler:
         if isinstance(args, dict):
             return f"{name} {json.dumps(args)}"
 
-        if isinstance(args, str):
-            return f"{name} {args}"
-
         return f"{name} {args}"
 
-    def _is_builtin_tool_name(self, tool_name: Optional[str]) -> bool:
+    def _should_suppress_tool(self, tool_name: Optional[str]) -> bool:
         if not tool_name:
             return False
         return tool_name in {
@@ -146,9 +143,6 @@ class ResponseHandler:
             "memory",
             "mcp_server",
         }
-
-    def _should_suppress_tool(self, tool_name: Optional[str]) -> bool:
-        return self._is_builtin_tool_name(tool_name)
 
     def _extract_text(self, parts: Sequence[ModelResponsePart]) -> str:
         """Fallback text extraction when no stream deltas were emitted."""

@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 from platformdirs import user_config_dir
 
@@ -13,7 +13,7 @@ def get_user_config_path() -> Path:
     return config_dir / "config.json"
 
 
-def load_user_config() -> Dict[str, Any]:
+def load_user_config() -> dict[str, Any]:
     """Load user configuration from file."""
     config_path = get_user_config_path()
 
@@ -27,7 +27,7 @@ def load_user_config() -> Dict[str, Any]:
         return {}
 
 
-def save_user_config(config_data: Dict[str, Any]) -> None:
+def save_user_config(config_data: dict[str, Any]) -> None:
     """Save user configuration to file."""
     config_path = get_user_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)

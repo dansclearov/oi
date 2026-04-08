@@ -89,7 +89,7 @@ class TestModelRegistry:
     def test_get_model_capabilities(self):
         with (
             patch("llm_cli.registry.load_models_and_aliases") as mock_load,
-            patch("llm_cli.registry.load_model_capabilities") as mock_caps,
+            patch("llm_cli.registry.get_model_capabilities") as mock_caps,
         ):
             mock_load.return_value = (
                 {"alias": ("provider", "model")},
@@ -107,7 +107,7 @@ class TestModelRegistry:
     def test_get_model_capabilities_accepts_resolved_model_name(self):
         with (
             patch("llm_cli.registry.load_models_and_aliases") as mock_load,
-            patch("llm_cli.registry.load_model_capabilities") as mock_caps,
+            patch("llm_cli.registry.get_model_capabilities") as mock_caps,
         ):
             mock_load.return_value = (
                 {"alias": ("provider", "model")},
@@ -125,7 +125,7 @@ class TestModelRegistry:
     def test_has_model_config_returns_true_for_configured_model(self):
         with (
             patch("llm_cli.registry.load_models_and_aliases") as mock_load,
-            patch("llm_cli.registry.load_model_capabilities_map") as mock_caps_map,
+            patch("llm_cli.registry.load_model_capabilities") as mock_caps_map,
         ):
             mock_load.return_value = (
                 {"alias": ("provider", "model")},
@@ -139,7 +139,7 @@ class TestModelRegistry:
     def test_has_model_config_returns_false_for_missing_model(self):
         with (
             patch("llm_cli.registry.load_models_and_aliases") as mock_load,
-            patch("llm_cli.registry.load_model_capabilities_map") as mock_caps_map,
+            patch("llm_cli.registry.load_model_capabilities") as mock_caps_map,
         ):
             mock_load.return_value = (
                 {"alias": ("provider", "model")},

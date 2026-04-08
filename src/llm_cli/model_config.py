@@ -1,11 +1,12 @@
 from functools import lru_cache
-from typing import Any, Dict
+from typing import Any
 
 from llm_cli.config.loaders import load_merged_model_config
+from llm_cli.ui.labels import WARNING_LABEL, ansi_message
 
 
 @lru_cache(maxsize=1)
-def load_model_capabilities() -> Dict[str, Dict[str, Dict[str, Any]]]:
+def load_model_capabilities() -> dict[str, dict[str, dict[str, Any]]]:
     """Load model capabilities from YAML config, merging user config with package config."""
     merged_config = load_merged_model_config()
     return {
@@ -16,20 +17,26 @@ def load_model_capabilities() -> Dict[str, Dict[str, Dict[str, Any]]]:
 
 
 def clear_model_capabilities_cache() -> None:
-    """Clear the in-memory capabilities cache."""
+    """Clear the in-memory capabilities cache (used in tests)."""
     load_model_capabilities.cache_clear()
 
 
 def _normalize_max_tokens(value: Any) -> int | None:
     """Return a positive integer max_tokens value when configured."""
-    if not isinstance(value, int):
+    if value is None:
         return None
-    if value <= 0:
+    if not isinstance(value, int) or value <= 0:
+        print(
+            ansi_message(
+                WARNING_LABEL,
+                f"Invalid max_tokens value {value!r} in models config; ignoring.",
+            )
+        )
         return None
     return value
 
 
-def get_model_capabilities(provider_name: str, model_id: str) -> Dict[str, Any]:
+def get_model_capabilities(provider_name: str, model_id: str) -> dict[str, Any]:
     """Get capabilities for a specific model with defaults."""
     config = load_model_capabilities()
 

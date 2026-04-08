@@ -1,7 +1,7 @@
 """Chat management with auto-save and smart title generation."""
 
 from functools import partial
-from typing import List, Optional
+from typing import Optional
 
 from rich.console import Console
 
@@ -32,7 +32,7 @@ class ChatManager:
         # Don't save empty chats - they'll be saved when first message is added.
         return self.chat_factory.create_new_chat(model, system_message)
 
-    def list_chats(self) -> List[ChatMetadata]:
+    def list_chats(self) -> list[ChatMetadata]:
         """List all available chats, sorted by updated_at desc."""
         return self.repository.list_chat_metadata(
             on_root_read_error=self._on_chat_dir_read_error,

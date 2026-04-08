@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Optional, Sequence
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -16,7 +16,7 @@ from pydantic_ai.messages import (
 )
 
 
-def serialize_model_messages(messages: Sequence[ModelMessage]) -> List[Dict]:
+def serialize_model_messages(messages: Sequence[ModelMessage]) -> list[dict]:
     """Serialize model messages to a JSON-friendly structure."""
     if not messages:
         return []
@@ -24,7 +24,7 @@ def serialize_model_messages(messages: Sequence[ModelMessage]) -> List[Dict]:
     return json.loads(json_bytes)
 
 
-def deserialize_model_messages(data: Sequence[Dict]) -> List[ModelMessage]:
+def deserialize_model_messages(data: Sequence[dict]) -> list[ModelMessage]:
     """Deserialize JSON data into model messages."""
     if not data:
         return []
@@ -32,10 +32,10 @@ def deserialize_model_messages(data: Sequence[Dict]) -> List[ModelMessage]:
 
 
 def convert_legacy_messages(
-    legacy_messages: Sequence[Dict[str, str]],
-) -> List[ModelMessage]:
+    legacy_messages: Sequence[dict[str, str]],
+) -> list[ModelMessage]:
     """Convert legacy OpenAI-style dict messages into ModelMessage objects."""
-    result: List[ModelMessage] = []
+    result: list[ModelMessage] = []
     pending_system_prompt: Optional[str] = None
 
     for message in legacy_messages:
@@ -62,9 +62,9 @@ def convert_legacy_messages(
     return result
 
 
-def flatten_history(messages: Sequence[ModelMessage]) -> List[Tuple[str, str]]:
+def flatten_history(messages: Sequence[ModelMessage]) -> list[tuple[str, str]]:
     """Flatten ModelMessages into (role, content) pairs for UI use."""
-    history: List[Tuple[str, str]] = []
+    history: list[tuple[str, str]] = []
 
     for message in messages:
         if isinstance(message, ModelRequest):
@@ -104,10 +104,20 @@ def latest_system_prompt(messages: Sequence[ModelMessage]) -> Optional[str]:
 
 def count_non_system_messages(messages: Sequence[ModelMessage]) -> int:
     """Count messages that should appear in the chat transcript (excludes system)."""
-    return len(flatten_history(messages))
+    count = 0
+    for message in messages:
+        if isinstance(message, ModelRequest):
+            if any(isinstance(part, UserPromptPart) for part in message.parts):
+                count += 1
+        elif isinstance(message, ModelResponse):
+            if any(
+                isinstance(part, TextPart) and part.content for part in message.parts
+            ):
+                count += 1
+    return count
 
 
-def build_prompt(system_prompt: Optional[str], user_prompt: str) -> List[ModelMessage]:
+def build_prompt(system_prompt: Optional[str], user_prompt: str) -> list[ModelMessage]:
     """Build a single-turn prompt with optional system instructions."""
     parts = []
     if system_prompt:

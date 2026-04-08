@@ -13,7 +13,7 @@ INITIAL_SELECTED_INDEX = 0
 USE_STYLED_RENDERER = True  # Set to False to use legacy PlainTextRenderer
 
 # Model Configuration
-DEFAULT_FALLBACK_MODEL = "gpt-4o"
+DEFAULT_FALLBACK_MODEL = "sonnet"
 
 # Interaction Keys
 NAVIGATION_KEYS = {

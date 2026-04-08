@@ -3,7 +3,7 @@
 import copy
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -32,9 +32,9 @@ class ChatMetadata:
     message_count: int
     bookmarked: bool = False
     smart_title_generated: bool = False
-    model_capabilities_snapshot: Optional[Dict[str, Any]] = None
+    model_capabilities_snapshot: Optional[dict[str, Any]] = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         data = {
             "id": self.id,
             "title": self.title,
@@ -52,7 +52,7 @@ class ChatMetadata:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "ChatMetadata":
+    def from_dict(cls, data: dict) -> "ChatMetadata":
         raw_snapshot = data.get("model_capabilities_snapshot")
         snapshot = (
             copy.deepcopy(raw_snapshot) if isinstance(raw_snapshot, dict) else None
@@ -101,7 +101,7 @@ class Chat:
     """A chat session with messages and metadata."""
 
     metadata: ChatMetadata
-    messages: List[ModelMessage] = field(default_factory=list)
+    messages: list[ModelMessage] = field(default_factory=list)
     pending_system_prompt: Optional[str] = None
 
     def append_user_message(self, content: str) -> None:

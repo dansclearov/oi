@@ -1,7 +1,6 @@
 import re
 from importlib import resources
 from pathlib import Path
-from typing import List
 
 from platformdirs import user_config_dir
 
@@ -35,7 +34,7 @@ def read_system_message_from_file(file_name: str) -> str:
         )
 
 
-def get_prompts() -> List[str]:
+def get_prompts() -> list[str]:
     """Get available prompts from both user config and package directories."""
     prompts = set()  # Use set to avoid duplicates
     pattern = r"prompt_(.+)\.txt"

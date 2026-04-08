@@ -166,9 +166,8 @@ Conversation and status labels are centralized in `ui/labels.py`:
 5. Thinking traces:
    - OpenAI reasoning models automatically receive `openai_reasoning_summary="detailed"` when thinking is enabled so we can render their reasoning summaries.
    - OpenAI reasoning models also set `openai_reasoning_effort="medium"` by default to satisfy the API requirement.
-   - Anthropic models automatically get `anthropic_thinking={"type": "enabled", "budget_tokens": 2048}` when thinking is enabled (via `setdefault` in client.py).
-   - **Claude Opus 4.6 and Sonnet 4.6** override this via `extra_params: {anthropic_thinking: {type: adaptive}}` in `models.yaml` — adaptive is the new preferred mode and `budget_tokens` is deprecated on both. Adaptive thinking means the model decides how much to think; depth is controlled by `anthropic_effort` (default `high`, same as omitting it; `max` is Opus 4.6 only).
-   - **Claude Haiku 4.5** is not on the deprecation list and keeps the `enabled+budget_tokens` fallback.
+   - Anthropic models default to `anthropic_thinking={"type": "adaptive"}` when thinking is enabled (via `setdefault` in client.py). Adaptive thinking means the model decides how much to think.
+   - **Claude Haiku 4.5** overrides this via `extra_params: {anthropic_thinking: {type: enabled, budget_tokens: 2048}}` in `models.yaml` because it still requires the explicit budget.
    - Google Gemini models default to `google_thinking_config={"include_thoughts": True}` when thinking is enabled so their thoughts stream into the UI.
 6. Reasoning-focused OpenAI models (gpt-5, o-series) should be defined under the `openai-responses` provider section so the Responses API (with thinking traces) is used.
 7. `--search` wires up Pydantic AI's `WebSearchTool` only for providers that support it (OpenAI Responses, Anthropic, Gemini). OpenRouter models automatically switch to their `:online` variant and add the `web` plugin so search works there too; other providers simply ignore the flag.

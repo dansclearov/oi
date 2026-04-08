@@ -3,7 +3,7 @@
 import copy
 from importlib import resources
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import yaml
 from platformdirs import user_config_dir
@@ -33,8 +33,8 @@ def _ensure_user_config() -> Path:
 
 
 def _deep_merge_models_section(
-    package_section: Dict[str, Any], user_section: Dict[str, Any]
-) -> Dict[str, Any]:
+    package_section: dict[str, Any], user_section: dict[str, Any]
+) -> dict[str, Any]:
     """Deep-merge model configs inside one provider section."""
     merged_section = copy.deepcopy(package_section)
 
@@ -49,8 +49,8 @@ def _deep_merge_models_section(
 
 
 def _merge_model_configs(
-    package_config: Dict[str, Any], user_config: Dict[str, Any]
-) -> Dict[str, Any]:
+    package_config: dict[str, Any], user_config: dict[str, Any]
+) -> dict[str, Any]:
     """Merge package + user model configs with alias override semantics."""
     merged_config = copy.deepcopy(package_config)
 
@@ -82,7 +82,7 @@ def _merge_model_configs(
     return merged_config
 
 
-def load_merged_model_config() -> Dict[str, Any]:
+def load_merged_model_config() -> dict[str, Any]:
     """Load and merge package + user models.yaml configuration."""
     try:
         with resources.files("llm_cli").joinpath("models.yaml").open("r") as f:
@@ -98,7 +98,7 @@ def load_merged_model_config() -> Dict[str, Any]:
         raise ConfigurationError("Invalid models.yaml: top-level mapping required")
 
     user_config_path = _ensure_user_config()
-    user_config: Dict[str, Any] = {}
+    user_config: dict[str, Any] = {}
     if user_config_path.exists():
         try:
             with open(user_config_path, "r") as f:
@@ -118,7 +118,7 @@ def load_merged_model_config() -> Dict[str, Any]:
     return _merge_model_configs(package_config, user_config)
 
 
-def load_models_and_aliases() -> Tuple[Dict[str, Tuple[str, str]], str]:
+def load_models_and_aliases() -> tuple[dict[str, tuple[str, str]], str]:
     """Load model map and default alias from merged models.yaml config.
 
     Loads package models.yaml first, then merges with user models.yaml if it exists.
@@ -127,7 +127,7 @@ def load_models_and_aliases() -> Tuple[Dict[str, Tuple[str, str]], str]:
     Returns:
         Tuple of (model_map, default_model)
     """
-    model_map: Dict[str, Tuple[str, str]] = {}
+    model_map: dict[str, tuple[str, str]] = {}
     default_model = DEFAULT_FALLBACK_MODEL  # fallback default
 
     merged_config = load_merged_model_config()
@@ -157,7 +157,7 @@ def load_models_and_aliases() -> Tuple[Dict[str, Tuple[str, str]], str]:
     # Load aliases
     aliases_raw = merged_config.get("aliases", {})
     if aliases_raw is None:
-        aliases: Dict[str, Any] = {}
+        aliases: dict[str, Any] = {}
     elif isinstance(aliases_raw, dict):
         aliases = aliases_raw
     else:
@@ -182,7 +182,7 @@ def load_models_and_aliases() -> Tuple[Dict[str, Tuple[str, str]], str]:
             default_model = default_spec
 
     # Load all aliases
-    unresolved_aliases: List[Tuple[str, str]] = []
+    unresolved_aliases: list[tuple[str, str]] = []
     for alias, model_spec in aliases.items():
         if alias == "default":
             continue
@@ -202,7 +202,7 @@ def load_models_and_aliases() -> Tuple[Dict[str, Tuple[str, str]], str]:
     # Resolve aliases that point at other aliases/model IDs (without provider prefix).
     # We iterate to support alias chains.
     while unresolved_aliases:
-        next_unresolved: List[Tuple[str, str]] = []
+        next_unresolved: list[tuple[str, str]] = []
         made_progress = False
         for alias, model_spec in unresolved_aliases:
             mapping = model_map.get(model_spec)

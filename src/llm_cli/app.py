@@ -137,7 +137,7 @@ def handle_chat_selection(args, chat_manager: ChatManager) -> Optional[Chat]:
             if current_chat is None:
                 # User cancelled, exit
                 sys.exit(0)
-    elif getattr(args, "continue"):
+    elif args.continue_chat:
         # Continue most recent chat
         current_chat = chat_manager.get_last_chat()
         if not current_chat:
@@ -293,7 +293,7 @@ def run_chat_loop(
     capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
 
     # Main interaction loop
-    finished = True
+    is_idle = True
     while True:
         pending_user_message = False
         try:
@@ -312,7 +312,7 @@ def run_chat_loop(
             current_chat.append_user_message(user_input)
             pending_user_message = True
 
-            finished = False
+            is_idle = False
             try:
                 model_response = llm_client.chat(
                     current_chat.messages,
@@ -327,7 +327,7 @@ def run_chat_loop(
             except Exception as exc:
                 _discard_pending_user_message(current_chat)
                 pending_user_message = False
-                finished = True
+                is_idle = True
                 print(
                     ansi_message(
                         ERROR_LABEL,
@@ -348,13 +348,13 @@ def run_chat_loop(
                 current_chat, chat_manager, llm_client, active_model
             )
 
-            finished = True
+            is_idle = True
 
         except KeyboardInterrupt:
-            if not finished:
+            if not is_idle:
                 if pending_user_message:
                     _discard_pending_user_message(current_chat)
-                finished = True
+                is_idle = True
                 print("", flush=True)
             else:
                 break
@@ -402,19 +402,17 @@ def main():
     active_model = current_chat.metadata.model
     if not is_new_chat:
         try:
-            active_model_for_comparison = registry.resolve_model_name(active_model)
+            resolved_active_model = registry.resolve_model_name(active_model)
         except ModelNotFoundError:
-            active_model_for_comparison = active_model
-    else:
-        active_model_for_comparison = active_model
-    if not is_new_chat and requested_model != active_model_for_comparison:
-        print(
-            ansi_message(
-                INFO_LABEL,
-                f"Resumed chat locked to its original model: {active_model} "
-                f"(ignoring --model {args.model})",
+            resolved_active_model = active_model
+        if requested_model != resolved_active_model:
+            print(
+                ansi_message(
+                    INFO_LABEL,
+                    f"Resumed chat locked to its original model: {active_model} "
+                    f"(ignoring --model {args.model})",
+                )
             )
-        )
 
     # Show continuation message for existing chats
     if not is_new_chat and current_chat.metadata.message_count > 2:

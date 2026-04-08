@@ -1,12 +1,7 @@
-from typing import Dict, Tuple
-
 from llm_cli.config.loaders import load_models_and_aliases
 from llm_cli.exceptions import ModelNotFoundError
 from llm_cli.llm_types import ModelCapabilities
-from llm_cli.model_config import (
-    get_model_capabilities as load_model_capabilities,
-    load_model_capabilities as load_model_capabilities_map,
-)
+from llm_cli.model_config import get_model_capabilities, load_model_capabilities
 
 # Aliases to exclude from display models
 EXCLUDED_ALIASES = {"default"}
@@ -16,12 +11,12 @@ class ModelRegistry:
     """Registry for managing model aliases and metadata."""
 
     def __init__(self):
-        self._model_map: Dict[str, Tuple[str, str]] = {}
-        self._aliases: Dict[str, Tuple[str, str]] = {}
-        self._default_model: str = "gpt-4o"  # fallback default
+        self._model_map: dict[str, tuple[str, str]] = {}
+        self._aliases: dict[str, tuple[str, str]] = {}
+        self._default_model: str = ""
         self._load_models_and_aliases()
 
-    def get_provider_for_model(self, model_name_or_alias: str) -> Tuple[str, str]:
+    def get_provider_for_model(self, model_name_or_alias: str) -> tuple[str, str]:
         """Get provider/model for an alias or a resolved `provider:model-id` name."""
         if model_name_or_alias in self._model_map:
             return self._model_map[model_name_or_alias]
@@ -41,7 +36,7 @@ class ModelRegistry:
         provider_name, model_id = self.get_provider_for_model(model_name_or_alias)
         return f"{provider_name}:{model_id}"
 
-    def get_available_models(self) -> Dict[str, str]:
+    def get_available_models(self) -> dict[str, str]:
         """Get the raw provider/model pairs for each alias."""
         return {
             alias: f"{provider_name}:{model_id}"
@@ -56,7 +51,7 @@ class ModelRegistry:
         """Get capabilities for a specific alias or resolved model name."""
         provider_name, model_id = self.get_provider_for_model(model_name_or_alias)
 
-        raw_caps = load_model_capabilities(provider_name, model_id)
+        raw_caps = get_model_capabilities(provider_name, model_id)
         return ModelCapabilities(
             supports_search=bool(raw_caps.get("supports_search", False)),
             supports_thinking=bool(raw_caps.get("supports_thinking", False)),
@@ -67,7 +62,7 @@ class ModelRegistry:
     def has_model_config(self, model_name_or_alias: str) -> bool:
         """Return True when the model has an explicit entry in merged models config."""
         provider_name, model_id = self.get_provider_for_model(model_name_or_alias)
-        model_capabilities = load_model_capabilities_map()
+        model_capabilities = load_model_capabilities()
         provider_models = model_capabilities.get(provider_name, {})
         return model_id in provider_models
 
@@ -100,7 +95,7 @@ class ModelRegistry:
             if alias != mapping[1]
         }
 
-    def _parse_model_name(self, model_name: str) -> Tuple[str, str] | None:
+    def _parse_model_name(self, model_name: str) -> tuple[str, str] | None:
         """Parse a resolved `provider:model-id` string."""
         if ":" not in model_name:
             return None

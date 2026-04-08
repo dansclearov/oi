@@ -64,7 +64,7 @@ class TestLLMClient:
 
         assert response is result
         assert attempts["count"] == 3
-        assert sleep_calls == [4, 4]
+        assert sleep_calls == [4, 8]
 
     def test_stream_model_response_with_retry_does_not_retry_after_output(
         self, monkeypatch

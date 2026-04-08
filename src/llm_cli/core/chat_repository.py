@@ -5,7 +5,6 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
-
 from llm_cli.config.settings import Config
 from llm_cli.core.message_utils import (
     convert_legacy_messages,

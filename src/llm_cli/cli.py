@@ -48,6 +48,7 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
     parser.add_argument(
         "-c",
         "--continue",
+        dest="continue_chat",
         action="store_true",
         help="Continue the most recent chat",
     )

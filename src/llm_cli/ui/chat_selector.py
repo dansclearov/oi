@@ -7,7 +7,7 @@ This module provides cross-platform keyboard input handling:
 """
 
 import sys
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 from rich.console import Console
 from rich.live import Live
@@ -31,7 +31,7 @@ class ChatSelector:
 
     def select_chat(
         self,
-        chats: List[ChatMetadata],
+        chats: list[ChatMetadata],
         *,
         load_chat: Callable[[str], Optional[Chat]],
         delete_chat: Callable[[str], None],
@@ -226,15 +226,15 @@ class ChatSelector:
             return None
 
     def _get_page_chats(
-        self, chats: List[ChatMetadata], current_page: int, page_size: int
-    ) -> List[ChatMetadata]:
+        self, chats: list[ChatMetadata], current_page: int, page_size: int
+    ) -> list[ChatMetadata]:
         start_idx = current_page * page_size
         end_idx = min(start_idx + page_size, len(chats))
         return chats[start_idx:end_idx]
 
     def _filter_chats(
-        self, chats: List[ChatMetadata], bookmarked_only: bool
-    ) -> List[ChatMetadata]:
+        self, chats: list[ChatMetadata], bookmarked_only: bool
+    ) -> list[ChatMetadata]:
         """Filter chats for the current selector mode."""
         if not bookmarked_only:
             return chats
@@ -242,7 +242,7 @@ class ChatSelector:
 
     def _clamp_selection_state(
         self,
-        chats: List[ChatMetadata],
+        chats: list[ChatMetadata],
         page_size: int,
         current_page: int,
         selected_index: int,
@@ -314,7 +314,7 @@ class ChatSelector:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
     def _refresh_chat_list(
-        self, chats: List[ChatMetadata], deleted_id: str
-    ) -> List[ChatMetadata]:
+        self, chats: list[ChatMetadata], deleted_id: str
+    ) -> list[ChatMetadata]:
         """Remove deleted chat from the list."""
         return [chat for chat in chats if chat.id != deleted_id]

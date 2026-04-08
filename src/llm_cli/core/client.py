@@ -2,7 +2,7 @@ import asyncio
 import signal
 import time
 from dataclasses import replace
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 from pydantic_ai.builtin_tools import WebSearchTool
 from pydantic_ai.direct import model_request_stream
@@ -155,7 +155,7 @@ class LLMClient:
     def _stream_model_response_with_retry(
         self,
         model_name: str,
-        model_messages: List[ModelMessage],
+        model_messages: list[ModelMessage],
         model_settings: Optional[ModelSettings],
         request_parameters: ModelRequestParameters,
         handler: ResponseHandler,
@@ -183,13 +183,13 @@ class LLMClient:
 
     def _retry_wait_seconds(self, attempt: int) -> int:
         """Exponential backoff for retries after an attempt number (1-indexed)."""
-        delay = 2 ** (attempt - 1)
-        return max(RETRY_WAIT_MIN_SECONDS, min(RETRY_WAIT_MAX_SECONDS, delay))
+        delay = RETRY_WAIT_MIN_SECONDS * (2 ** (attempt - 1))
+        return min(delay, RETRY_WAIT_MAX_SECONDS)
 
     async def _stream_model_response(
         self,
         model_name: str,
-        model_messages: List[ModelMessage],
+        model_messages: list[ModelMessage],
         model_settings: Optional[ModelSettings],
         request_parameters: ModelRequestParameters,
         handler: ResponseHandler,
