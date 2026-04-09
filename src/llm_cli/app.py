@@ -2,6 +2,7 @@
 
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -9,8 +10,7 @@ from dotenv import load_dotenv
 from platformdirs import user_config_dir, user_data_dir
 
 from llm_cli.cli import parse_arguments
-from llm_cli.config.settings import Config, setup_providers
-from llm_cli.config.user_config import update_user_config
+from llm_cli.config.settings import Config, update_user_config
 from llm_cli.constants import (
     MAX_TITLE_LENGTH,
     MIN_MESSAGES_FOR_SMART_TITLE,
@@ -38,6 +38,7 @@ from llm_cli.local_commands import (
 )
 from llm_cli.prompts import read_system_message_from_file
 from llm_cli.llm_types import ChatOptions
+from llm_cli.registry import ModelRegistry
 from llm_cli.ui.input_handler import InputHandler
 from llm_cli.ui.labels import (
     AI_LABEL,
@@ -94,16 +95,23 @@ def print_all_messages(messages: Sequence[ModelMessage]) -> None:
         print(ansi_message(label, content))
 
 
-def setup_configuration(
-    args, registry
-) -> tuple[Config, ChatManager, LLMClient, InputHandler, ChatOptions, str]:
+@dataclass
+class ChatLoopContext:
+    """Groups the state needed by the chat loop."""
+
+    config: Config
+    chat_manager: ChatManager
+    llm_client: LLMClient
+    input_handler: InputHandler
+    chat_options: ChatOptions
+    prompt_str: str
+    active_model: str = ""
+
+
+def setup_configuration(args, registry) -> ChatLoopContext:
     """Set up configuration and components."""
     config = Config()
-    chat_manager = ChatManager(config)
-    llm_client = LLMClient(registry)
-    input_handler = InputHandler(config)
 
-    # Set up chat options
     chat_options = ChatOptions(
         enable_search=args.search,
         enable_thinking=not args.no_thinking,
@@ -112,7 +120,14 @@ def setup_configuration(
 
     prompt_str = read_system_message_from_file("prompt_" + args.prompt + ".txt")
 
-    return config, chat_manager, llm_client, input_handler, chat_options, prompt_str
+    return ChatLoopContext(
+        config=config,
+        chat_manager=ChatManager(config),
+        llm_client=LLMClient(registry),
+        input_handler=InputHandler(config),
+        chat_options=chat_options,
+        prompt_str=prompt_str,
+    )
 
 
 def handle_chat_selection(args, chat_manager: ChatManager) -> Optional[Chat]:
@@ -278,18 +293,9 @@ def _warn_if_response_hit_output_limit(model_response: ModelResponse) -> None:
     )
 
 
-def run_chat_loop(
-    current_chat: Chat,
-    chat_manager: ChatManager,
-    llm_client: LLMClient,
-    input_handler: InputHandler,
-    chat_options: ChatOptions,
-    prompt_str: str,
-    config: Config,
-    active_model: str,
-) -> None:
+def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
     """Run the main chat interaction loop."""
-    _print_chat_session_context(current_chat, prompt_str)
+    _print_chat_session_context(current_chat, ctx.prompt_str)
     capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
 
     # Main interaction loop
@@ -297,14 +303,14 @@ def run_chat_loop(
     while True:
         pending_user_message = False
         try:
-            user_input = input_handler.get_user_input()
+            user_input = ctx.input_handler.get_user_input()
             normalized_input = user_input.strip()
 
             if not normalized_input:
                 continue
 
             if _handle_local_command(
-                normalized_input, config, current_chat, chat_manager
+                normalized_input, ctx.config, current_chat, ctx.chat_manager
             ):
                 continue
 
@@ -314,10 +320,10 @@ def run_chat_loop(
 
             is_idle = False
             try:
-                model_response = llm_client.chat(
+                model_response = ctx.llm_client.chat(
                     current_chat.messages,
-                    active_model,
-                    chat_options,
+                    ctx.active_model,
+                    ctx.chat_options,
                     capabilities_override=capabilities_override,
                 )
             except KeyboardInterrupt:
@@ -342,10 +348,10 @@ def run_chat_loop(
 
             _update_title_from_first_user_message(current_chat)
 
-            chat_manager.save_chat(current_chat)  # Auto-save after each exchange
+            ctx.chat_manager.save_chat(current_chat)  # Auto-save after each exchange
 
             _maybe_generate_smart_title(
-                current_chat, chat_manager, llm_client, active_model
+                current_chat, ctx.chat_manager, ctx.llm_client, ctx.active_model
             )
 
             is_idle = True
@@ -371,7 +377,7 @@ def _discard_pending_user_message(current_chat: Chat) -> None:
 
 def main():
     """Main entry point for the LLM CLI application."""
-    registry = setup_providers()
+    registry = ModelRegistry()
     args = parse_arguments(registry)
 
     # Handle --user-paths command
@@ -380,36 +386,34 @@ def main():
         return
 
     try:
-        config, chat_manager, llm_client, input_handler, chat_options, prompt_str = (
-            setup_configuration(args, registry)
-        )
+        ctx = setup_configuration(args, registry)
     except PromptNotFoundError as e:
         print(ansi_message(ERROR_LABEL, str(e)))
         sys.exit(2)
 
     # Handle chat selection/loading
-    current_chat = handle_chat_selection(args, chat_manager)
+    current_chat = handle_chat_selection(args, ctx.chat_manager)
     is_new_chat = False
     requested_model = registry.resolve_model_name(args.model)
 
     if current_chat is None:
         # Create new chat
-        current_chat = chat_manager.create_new_chat(requested_model, prompt_str)
+        current_chat = ctx.chat_manager.create_new_chat(requested_model, ctx.prompt_str)
         current_chat.metadata.set_model_capabilities_snapshot(
             registry.get_model_capabilities(requested_model)
         )
         is_new_chat = True
-    active_model = current_chat.metadata.model
+    ctx.active_model = current_chat.metadata.model
     if not is_new_chat:
         try:
-            resolved_active_model = registry.resolve_model_name(active_model)
+            resolved_active_model = registry.resolve_model_name(ctx.active_model)
         except ModelNotFoundError:
-            resolved_active_model = active_model
+            resolved_active_model = ctx.active_model
         if requested_model != resolved_active_model:
             print(
                 ansi_message(
                     INFO_LABEL,
-                    f"Resumed chat locked to its original model: {active_model} "
+                    f"Resumed chat locked to its original model: {ctx.active_model} "
                     f"(ignoring --model {args.model})",
                 )
             )
@@ -430,16 +434,7 @@ def main():
             )
         )
 
-    run_chat_loop(
-        current_chat,
-        chat_manager,
-        llm_client,
-        input_handler,
-        chat_options,
-        prompt_str,
-        config,
-        active_model,
-    )
+    run_chat_loop(current_chat, ctx)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from llm_cli.llm_types import ChatOptions, ModelCapabilities
-from llm_cli.ui.labels import AI_LABEL, ansi_label, rich_label
+from llm_cli.ui.labels import AI_LABEL, rich_label
 
 
 class ResponseRenderer(ABC):
@@ -116,34 +116,6 @@ class ResponseRenderer(ABC):
 
     @abstractmethod
     def _finish(self) -> None: ...
-
-
-class PlainTextRenderer(ResponseRenderer):
-    """Simple print-based renderer."""
-
-    def start_response(self) -> None:
-        if self.options.silent:
-            return
-
-        print(ansi_label(AI_LABEL), end="", flush=True)
-
-    def _render_text(self, text: str) -> None:
-        print(text, end="", flush=True)
-
-    def _render_thinking(self, text: str) -> None:
-        print(text, end="", flush=True)
-
-    def _render_tool(self, text: str) -> None:
-        print(f"\n[tool] {text}\n", end="", flush=True)
-
-    def _begin_thinking_section(self) -> None:
-        print("<thinking>", flush=True)
-
-    def _end_thinking_section(self, *, final: bool) -> None:
-        print("\n</thinking>\n", flush=True)
-
-    def _finish(self) -> None:
-        print()
 
 
 class StyledRenderer(ResponseRenderer):

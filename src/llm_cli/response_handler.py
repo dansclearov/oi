@@ -23,9 +23,8 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 
-from llm_cli.constants import USE_STYLED_RENDERER
 from llm_cli.llm_types import ChatOptions, ModelCapabilities
-from llm_cli.renderers import PlainTextRenderer, ResponseRenderer, StyledRenderer
+from llm_cli.renderers import ResponseRenderer, StyledRenderer
 
 
 class ResponseHandler:
@@ -39,10 +38,7 @@ class ResponseHandler:
         self.capabilities = capabilities
         self.options = options
 
-        if USE_STYLED_RENDERER:
-            self.renderer: ResponseRenderer = StyledRenderer(capabilities, options)
-        else:
-            self.renderer = PlainTextRenderer(capabilities, options)
+        self.renderer: ResponseRenderer = StyledRenderer(capabilities, options)
 
     def start_response(self) -> None:
         """Initialize the response rendering."""

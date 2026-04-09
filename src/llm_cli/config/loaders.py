@@ -118,19 +118,16 @@ def load_merged_model_config() -> dict[str, Any]:
     return _merge_model_configs(package_config, user_config)
 
 
-def load_models_and_aliases() -> tuple[dict[str, tuple[str, str]], str]:
-    """Load model map and default alias from merged models.yaml config.
-
-    Loads package models.yaml first, then merges with user models.yaml if it exists.
-    User config takes precedence for aliases and default model.
+def parse_models_and_aliases(
+    merged_config: dict[str, Any],
+) -> tuple[dict[str, tuple[str, str]], str]:
+    """Parse model map and default alias from a pre-merged config dict.
 
     Returns:
         Tuple of (model_map, default_model)
     """
     model_map: dict[str, tuple[str, str]] = {}
     default_model = DEFAULT_FALLBACK_MODEL  # fallback default
-
-    merged_config = load_merged_model_config()
 
     # Load all models from all provider sections dynamically
     for section_name, section_data in merged_config.items():
@@ -227,3 +224,8 @@ def load_models_and_aliases() -> tuple[dict[str, tuple[str, str]], str]:
         default_model = next(iter(model_map))
 
     return model_map, default_model
+
+
+def load_models_and_aliases() -> tuple[dict[str, tuple[str, str]], str]:
+    """Load config from disk and parse into model map + default (convenience wrapper)."""
+    return parse_models_and_aliases(load_merged_model_config())

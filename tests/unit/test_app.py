@@ -1,17 +1,35 @@
 from datetime import datetime
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
 from pydantic_ai.messages import ModelResponse, TextPart
 
-from llm_cli.app import _handle_local_command, handle_chat_selection, run_chat_loop
+from llm_cli.app import (
+    ChatLoopContext,
+    _handle_local_command,
+    handle_chat_selection,
+    run_chat_loop,
+)
 from llm_cli.config.settings import Config
 from llm_cli.core.session import Chat, ChatMetadata
 from llm_cli.exceptions import ChatNotFoundError
 from llm_cli.llm_types import ChatOptions, ModelCapabilities
 from llm_cli.ui.labels import WARNING_LABEL, ansi_message
+
+
+def _make_ctx(**overrides: Any) -> ChatLoopContext:
+    """Build a ChatLoopContext with mock defaults, overridable per-field."""
+    return ChatLoopContext(
+        config=overrides.get("config", Config()),
+        chat_manager=overrides.get("chat_manager", Mock()),
+        llm_client=overrides.get("llm_client", Mock()),
+        input_handler=overrides.get("input_handler", Mock()),
+        chat_options=overrides.get("chat_options", ChatOptions()),
+        prompt_str=overrides.get("prompt_str", "You are helpful."),
+        active_model=overrides.get("active_model", "sonnet"),
+    )
 
 
 def test_run_chat_loop_skips_empty_input():
@@ -25,22 +43,12 @@ def test_run_chat_loop_skips_empty_input():
     )
     current_chat = Chat(metadata=metadata)
 
-    chat_manager = Mock()
     llm_client = Mock()
     input_handler = Mock()
     input_handler.get_user_input.side_effect = ["", KeyboardInterrupt()]
-    config = Config()
+    ctx = _make_ctx(llm_client=llm_client, input_handler=input_handler)
 
-    run_chat_loop(
-        current_chat=current_chat,
-        chat_manager=chat_manager,
-        llm_client=llm_client,
-        input_handler=input_handler,
-        chat_options=ChatOptions(),
-        prompt_str="You are helpful.",
-        config=config,
-        active_model="sonnet",
-    )
+    run_chat_loop(current_chat, ctx)
 
     llm_client.chat.assert_not_called()
     assert current_chat.messages == []
@@ -57,22 +65,12 @@ def test_run_chat_loop_skips_whitespace_only_input():
     )
     current_chat = Chat(metadata=metadata)
 
-    chat_manager = Mock()
     llm_client = Mock()
     input_handler = Mock()
     input_handler.get_user_input.side_effect = ["   ", KeyboardInterrupt()]
-    config = Config()
+    ctx = _make_ctx(llm_client=llm_client, input_handler=input_handler)
 
-    run_chat_loop(
-        current_chat=current_chat,
-        chat_manager=chat_manager,
-        llm_client=llm_client,
-        input_handler=input_handler,
-        chat_options=ChatOptions(),
-        prompt_str="You are helpful.",
-        config=config,
-        active_model="sonnet",
-    )
+    run_chat_loop(current_chat, ctx)
 
     llm_client.chat.assert_not_called()
     assert current_chat.messages == []
@@ -98,23 +96,13 @@ def test_run_chat_loop_uses_active_model_for_resumed_chat():
     current_chat.append_user_message("Earlier user message")
     current_chat.append_assistant_response("Earlier assistant message")
 
-    chat_manager = Mock()
     llm_client = Mock()
     llm_client.chat.return_value = ModelResponse(parts=[TextPart(content="new reply")])
     input_handler = Mock()
     input_handler.get_user_input.side_effect = ["Next question", KeyboardInterrupt()]
-    config = Config()
+    ctx = _make_ctx(llm_client=llm_client, input_handler=input_handler)
 
-    run_chat_loop(
-        current_chat=current_chat,
-        chat_manager=chat_manager,
-        llm_client=llm_client,
-        input_handler=input_handler,
-        chat_options=ChatOptions(),
-        prompt_str="You are helpful.",
-        config=config,
-        active_model="sonnet",
-    )
+    run_chat_loop(current_chat, ctx)
 
     assert llm_client.chat.call_args[0][1] == "sonnet"
     capabilities_override = llm_client.chat.call_args.kwargs["capabilities_override"]
@@ -146,23 +134,13 @@ def test_run_chat_loop_discards_user_message_on_request_error():
     )
     current_chat = Chat(metadata=metadata)
 
-    chat_manager = Mock()
     llm_client = Mock()
     llm_client.chat.side_effect = RuntimeError("upstream failed")
     input_handler = Mock()
     input_handler.get_user_input.side_effect = ["Hello", KeyboardInterrupt()]
-    config = Config()
+    ctx = _make_ctx(llm_client=llm_client, input_handler=input_handler)
 
-    run_chat_loop(
-        current_chat=current_chat,
-        chat_manager=chat_manager,
-        llm_client=llm_client,
-        input_handler=input_handler,
-        chat_options=ChatOptions(),
-        prompt_str="You are helpful.",
-        config=config,
-        active_model="sonnet",
-    )
+    run_chat_loop(current_chat, ctx)
 
     # Failed requests should not leave orphan user messages behind.
     assert current_chat.messages == []
@@ -179,7 +157,6 @@ def test_run_chat_loop_warns_when_response_hits_output_limit(capsys):
     )
     current_chat = Chat(metadata=metadata)
 
-    chat_manager = Mock()
     llm_client = Mock()
     llm_client.chat.return_value = ModelResponse(
         parts=[TextPart(content="truncated")],
@@ -187,18 +164,9 @@ def test_run_chat_loop_warns_when_response_hits_output_limit(capsys):
     )
     input_handler = Mock()
     input_handler.get_user_input.side_effect = ["Hello", KeyboardInterrupt()]
-    config = Config()
+    ctx = _make_ctx(llm_client=llm_client, input_handler=input_handler)
 
-    run_chat_loop(
-        current_chat=current_chat,
-        chat_manager=chat_manager,
-        llm_client=llm_client,
-        input_handler=input_handler,
-        chat_options=ChatOptions(),
-        prompt_str="You are helpful.",
-        config=config,
-        active_model="sonnet",
-    )
+    run_chat_loop(current_chat, ctx)
 
     assert (
         ansi_message(
@@ -310,20 +278,10 @@ def test_run_chat_loop_does_not_save_clean_chat_on_exit():
     current_chat.append_assistant_response("Earlier assistant message")
 
     chat_manager = Mock()
-    llm_client = Mock()
     input_handler = Mock()
     input_handler.get_user_input.side_effect = [KeyboardInterrupt()]
-    config = Config()
+    ctx = _make_ctx(chat_manager=chat_manager, input_handler=input_handler)
 
-    run_chat_loop(
-        current_chat=current_chat,
-        chat_manager=chat_manager,
-        llm_client=llm_client,
-        input_handler=input_handler,
-        chat_options=ChatOptions(),
-        prompt_str="You are helpful.",
-        config=config,
-        active_model="sonnet",
-    )
+    run_chat_loop(current_chat, ctx)
 
     chat_manager.save_chat.assert_not_called()

@@ -172,8 +172,6 @@ class LLMClient:
                         handler,
                     )
                 )
-            except KeyboardInterrupt:
-                raise
             except Exception:
                 if attempt >= MAX_CHAT_ATTEMPTS or handler.has_visible_output():
                     raise
@@ -224,6 +222,14 @@ class LLMClient:
         ):
             plugins.append({"id": "web"})
 
+    _BUILTIN_SEARCH_PROVIDERS = {
+        "anthropic",
+        "openai-responses",
+        "google-gla",
+        "google-vertex",
+        "xai",
+    }
+
     def _build_request_parameters(
         self,
         provider_name: str,
@@ -233,24 +239,11 @@ class LLMClient:
         """Create provider-specific request parameters (built-in tools, etc.)."""
         builtin_tools = []
 
-        if options.enable_search and capabilities.supports_search:
-            if self._provider_supports_builtin_search(provider_name):
-                builtin_tools.append(WebSearchTool())
-            else:
-                # Provider claims to support search but no known API hook; fall back silently.
-                pass
+        if (
+            options.enable_search
+            and capabilities.supports_search
+            and provider_name in self._BUILTIN_SEARCH_PROVIDERS
+        ):
+            builtin_tools.append(WebSearchTool())
 
         return ModelRequestParameters(builtin_tools=builtin_tools)
-
-    def _provider_supports_builtin_search(self, provider_name: str) -> bool:
-        """Determine whether we can attach the built-in WebSearchTool for this provider."""
-        if provider_name in {
-            "anthropic",
-            "openai-responses",
-            "google-gla",
-            "google-vertex",
-            "xai",
-        }:
-            return True
-
-        return False

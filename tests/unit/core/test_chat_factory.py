@@ -1,16 +1,19 @@
+from unittest.mock import patch
 from datetime import datetime
 
-from llm_cli.core.chat_factory import ChatFactory
+from llm_cli.core.session import Chat
 
 
-def test_create_new_chat_uses_consistent_defaults():
+def test_create_new_chat():
     now = datetime(2026, 2, 24, 15, 30, 45)
-    factory = ChatFactory(
-        now_fn=lambda: now,
-        uuid_fn=lambda: "12345678-dead-beef-cafe-0123456789ab",
-    )
+    with (
+        patch("llm_cli.core.session.datetime") as mock_dt,
+        patch("llm_cli.core.session.uuid") as mock_uuid,
+    ):
+        mock_dt.now.return_value = now
+        mock_uuid.uuid4.return_value = "12345678-dead-beef-cafe-0123456789ab"
 
-    chat = factory.create_new_chat("sonnet", "You are helpful.")
+        chat = Chat.create_new("sonnet", "You are helpful.")
 
     assert chat.metadata.id == "20260224_153045_12345678"
     assert chat.metadata.title == "Chat 2026-02-24 15:30"

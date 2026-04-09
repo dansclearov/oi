@@ -9,9 +9,6 @@ DEFAULT_PAGE_SIZE = 10
 INITIAL_PAGE = 0
 INITIAL_SELECTED_INDEX = 0
 
-# Renderer Settings
-USE_STYLED_RENDERER = True  # Set to False to use legacy PlainTextRenderer
-
 # Model Configuration
 DEFAULT_FALLBACK_MODEL = "sonnet"
 

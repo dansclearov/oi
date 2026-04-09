@@ -1,20 +1,52 @@
-from llm_cli.config.loaders import load_models_and_aliases
+from typing import Any
+
+from llm_cli.config.loaders import load_merged_model_config, parse_models_and_aliases
 from llm_cli.exceptions import ModelNotFoundError
 from llm_cli.llm_types import ModelCapabilities
-from llm_cli.model_config import get_model_capabilities, load_model_capabilities
+from llm_cli.ui.labels import WARNING_LABEL, ansi_message
 
 # Aliases to exclude from display models
 EXCLUDED_ALIASES = {"default"}
+
+
+def _normalize_max_tokens(value: Any) -> int | None:
+    """Return a positive integer max_tokens value when configured."""
+    if value is None:
+        return None
+    if not isinstance(value, int) or value <= 0:
+        print(
+            ansi_message(
+                WARNING_LABEL,
+                f"Invalid max_tokens value {value!r} in models config; ignoring.",
+            )
+        )
+        return None
+    return value
 
 
 class ModelRegistry:
     """Registry for managing model aliases and metadata."""
 
     def __init__(self):
+        merged_config = load_merged_model_config()
         self._model_map: dict[str, tuple[str, str]] = {}
         self._aliases: dict[str, tuple[str, str]] = {}
         self._default_model: str = ""
-        self._load_models_and_aliases()
+        self._provider_configs: dict[str, dict[str, Any]] = {}
+
+        self._model_map, self._default_model = parse_models_and_aliases(merged_config)
+        self._aliases = {
+            alias: mapping
+            for alias, mapping in self._model_map.items()
+            if alias != mapping[1]
+        }
+        self._provider_configs = {
+            provider: models
+            for provider, models in merged_config.items()
+            if provider != "aliases"
+            and not provider.startswith("_")
+            and isinstance(models, dict)
+        }
 
     def get_provider_for_model(self, model_name_or_alias: str) -> tuple[str, str]:
         """Get provider/model for an alias or a resolved `provider:model-id` name."""
@@ -51,19 +83,22 @@ class ModelRegistry:
         """Get capabilities for a specific alias or resolved model name."""
         provider_name, model_id = self.get_provider_for_model(model_name_or_alias)
 
-        raw_caps = get_model_capabilities(provider_name, model_id)
+        model_entry = self._provider_configs.get(provider_name, {}).get(model_id, {})
+        model_config = model_entry if isinstance(model_entry, dict) else {}
+        extra_params = model_config.get("extra_params", {})
+        safe_extra_params = dict(extra_params) if isinstance(extra_params, dict) else {}
+
         return ModelCapabilities(
-            supports_search=bool(raw_caps.get("supports_search", False)),
-            supports_thinking=bool(raw_caps.get("supports_thinking", False)),
-            max_tokens=raw_caps.get("max_tokens"),
-            extra_params=raw_caps.get("extra_params", {}),
+            supports_search=bool(model_config.get("supports_search", False)),
+            supports_thinking=bool(model_config.get("supports_thinking", False)),
+            max_tokens=_normalize_max_tokens(model_config.get("max_tokens")),
+            extra_params=safe_extra_params,
         )
 
     def has_model_config(self, model_name_or_alias: str) -> bool:
         """Return True when the model has an explicit entry in merged models config."""
         provider_name, model_id = self.get_provider_for_model(model_name_or_alias)
-        model_capabilities = load_model_capabilities()
-        provider_models = model_capabilities.get(provider_name, {})
+        provider_models = self._provider_configs.get(provider_name, {})
         return model_id in provider_models
 
     def get_display_models(self) -> list[str]:
@@ -85,15 +120,6 @@ class ModelRegistry:
             display_models.add(self._default_model)
 
         return sorted(display_models)
-
-    def _load_models_and_aliases(self) -> None:
-        """Load models and aliases from models.yaml file."""
-        self._model_map, self._default_model = load_models_and_aliases()
-        self._aliases = {
-            alias: mapping
-            for alias, mapping in self._model_map.items()
-            if alias != mapping[1]
-        }
 
     def _parse_model_name(self, model_name: str) -> tuple[str, str] | None:
         """Parse a resolved `provider:model-id` string."""

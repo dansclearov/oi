@@ -1,6 +1,7 @@
 """Chat session management."""
 
 import copy
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
@@ -103,6 +104,22 @@ class Chat:
     metadata: ChatMetadata
     messages: list[ModelMessage] = field(default_factory=list)
     pending_system_prompt: Optional[str] = None
+
+    @classmethod
+    def create_new(cls, model: str, system_message: str) -> "Chat":
+        """Create a new unsaved chat with a placeholder title."""
+        now = datetime.now()
+        chat_id = f"{now.strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+
+        metadata = ChatMetadata(
+            id=chat_id,
+            title=f"Chat {now.strftime('%Y-%m-%d %H:%M')}",
+            created_at=now,
+            updated_at=now,
+            model=model,
+            message_count=0,
+        )
+        return cls(metadata=metadata, pending_system_prompt=system_message)
 
     def append_user_message(self, content: str) -> None:
         """Append a user message, injecting system prompt if pending."""

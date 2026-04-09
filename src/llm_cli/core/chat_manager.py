@@ -6,7 +6,6 @@ from typing import Optional
 from rich.console import Console
 
 from llm_cli.config.settings import Config
-from llm_cli.core.chat_factory import ChatFactory
 from llm_cli.core.chat_repository import ChatRepository
 from llm_cli.core.smart_title import SmartTitleGenerator
 from llm_cli.core.session import Chat, ChatMetadata
@@ -20,7 +19,6 @@ class ChatManager:
 
     def __init__(self, config: Config):
         self.config = config
-        self.chat_factory = ChatFactory()
         self.repository = ChatRepository(config)
         self.smart_title_generator = SmartTitleGenerator()
         # Disable Rich's automatic syntax highlighting - it makes timestamps look like code
@@ -29,8 +27,7 @@ class ChatManager:
 
     def create_new_chat(self, model: str, system_message: str) -> Chat:
         """Create a new empty chat session."""
-        # Don't save empty chats - they'll be saved when first message is added.
-        return self.chat_factory.create_new_chat(model, system_message)
+        return Chat.create_new(model, system_message)
 
     def list_chats(self) -> list[ChatMetadata]:
         """List all available chats, sorted by updated_at desc."""
@@ -119,8 +116,6 @@ class ChatManager:
                 chat.metadata.title = new_title
 
             self._mark_title_generation_attempted(chat)
-        except KeyboardInterrupt:
-            raise
         except Exception as exc:
             self.console.print(
                 rich_message(

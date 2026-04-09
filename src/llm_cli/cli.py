@@ -1,6 +1,6 @@
 import argparse
 
-from llm_cli.config.user_config import load_user_config
+from llm_cli.config.settings import load_user_config
 from llm_cli.prompts import get_prompts
 from llm_cli.registry import ModelRegistry
 

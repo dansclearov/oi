@@ -62,34 +62,35 @@ uv run llm-cli concise -m sonnet # Use specific prompt and model
 src/llm_cli/
 ├── core/              # Core business logic
 │   ├── client.py      # LLMClient - API calls & retry logic
-│   ├── session.py     # Chat & ChatMetadata - data models
-│   └── chat_manager.py # ChatManager - CRUD operations
+│   ├── session.py     # Chat & ChatMetadata - data models + Chat.create_new()
+│   ├── chat_manager.py # ChatManager - CRUD operations
+│   ├── chat_repository.py # ChatRepository - filesystem persistence
+│   ├── message_utils.py # Message serialization & history helpers
+│   └── smart_title.py # Smart title generation
 ├── config/            # Configuration management
-│   ├── settings.py    # Config class & registry setup
-│   ├── loaders.py     # YAML model configuration loading
-│   └── user_config.py # User configuration management
+│   ├── settings.py    # Config class + user config (JSON) management
+│   └── loaders.py     # YAML model configuration loading & merging
 ├── ui/                # User interface components
 │   ├── input_handler.py # InputHandler - prompt_toolkit integration
 │   ├── chat_selector.py # ChatSelector - interactive chat picker
 │   └── labels.py      # Shared ANSI/Rich/prompt-toolkit label styling
 ├── llm_types.py       # Shared chat/model capability dataclasses
-├── app.py             # Main application orchestration
+├── app.py             # Main application orchestration + ChatLoopContext
 ├── cli.py             # Command-line argument parsing
 ├── main.py            # Entry point (delegates to app.py)
 ├── constants.py       # All constants & UI config
 ├── exceptions.py      # Custom exception classes
 ├── local_commands.py  # Local in-chat slash command registry + completion
 ├── prompts.py         # Prompt file loading
-├── model_config.py    # Model capabilities loading
-├── registry.py        # ModelRegistry - alias + capability management
-└── renderers.py       # Response rendering (PlainTextRenderer, StyledRenderer)
+├── registry.py        # ModelRegistry - alias + capability management (single config load)
+└── renderers.py       # Response rendering (StyledRenderer)
 ```
 
 **Multi-provider LLM Client:**
 Supports OpenAI, Anthropic, DeepSeek, Google Gemini, xAI, and OpenRouter through Pydantic AI's `direct` APIs with a unified interface.
 
 **Centralized Model Registry:**
-- `ModelRegistry` loads all models and aliases from `models.yaml` 
+- `ModelRegistry` loads merged config once via `load_merged_model_config()`, then derives both the model map and capabilities from it
 - Providers are "dumb" API clients - no hardcoded model definitions
 - Default model configurable via `aliases.default` in YAML
 - Cross-provider aliases supported
@@ -116,8 +117,7 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - Auto-save functionality
 
 **Streaming & Output:**
-- Two renderers: `PlainTextRenderer` and `StyledRenderer` 
-- `StyledRenderer` provides styled thinking traces (NOT markdown rendering!)
+- `StyledRenderer` is the only renderer — provides styled thinking traces (NOT markdown rendering!)
 - Shared label/color definitions live in `ui/labels.py` and are reused by plain prints, Rich output, and the prompt label
 - Rich console with `highlight=False` to prevent number styling in LLM output
 - Real-time streaming with interrupt handling
@@ -142,10 +142,10 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 **Main Function Structure:**
 Located in `app.py`, broken into logical functions:
 - `parse_arguments()` - CLI parsing (from cli.py)
-- `setup_configuration()` - Component setup  
+- `setup_configuration()` - Returns a `ChatLoopContext` bundling all components
 - `handle_chat_selection()` - Chat loading
-- `create_new_chat()` - New session creation
-- `run_chat_loop()` - Main interaction
+- `Chat.create_new()` - New session creation (classmethod on `Chat`)
+- `run_chat_loop(chat, ctx)` - Main interaction (takes `ChatLoopContext`)
 - `main()` - High-level orchestration
 
 **Key Constants:**
@@ -160,7 +160,7 @@ Conversation and status labels are centralized in `ui/labels.py`:
 
 **Common Gotchas:**
 1. Add models to `models.yaml`, not provider classes
-2. `StyledRenderer` != markdown rendering, just styled console output
+2. `StyledRenderer` is for styled thinking traces, NOT markdown rendering
 3. Default model from YAML `aliases.default`, not hardcoded
 4. No bespoke provider classes—add/update models via YAML aliases instead
 5. Thinking traces:
@@ -172,7 +172,8 @@ Conversation and status labels are centralized in `ui/labels.py`:
 6. Reasoning-focused OpenAI models (gpt-5, o-series) should be defined under the `openai-responses` provider section so the Responses API (with thinking traces) is used.
 7. `--search` wires up Pydantic AI's `WebSearchTool` only for providers that support it (OpenAI Responses, Anthropic, Gemini). OpenRouter models automatically switch to their `:online` variant and add the `web` plugin so search works there too; other providers simply ignore the flag.
 8. Rich console has `highlight=False` to prevent auto-styling numbers
-9. Prompts loaded from `src/llm_cli/prompts/` directory, not a Python package
+9. User config functions (`load_user_config`, `update_user_config`) live in `config/settings.py`, not a separate file
+10. Prompts loaded from `src/llm_cli/prompts/` directory, not a Python package
 10. Custom exceptions in `exceptions.py` for proper error handling
 11. Conversation/status label text and colors live in `ui/labels.py`, not `constants.py`
 12. Local slash commands are completed from `local_commands.py`; if you add one, update the command registry there
@@ -181,5 +182,5 @@ Conversation and status labels are centralized in `ui/labels.py`:
 **Quick Tests:**
 ```bash
 uv run llm-cli --help   # Smoke test
-uv run python -c "from src.llm_cli.config.settings import setup_providers; print(list(setup_providers().get_available_models().keys()))"  # Test model loading
+uv run python -c "from llm_cli.registry import ModelRegistry; print(list(ModelRegistry().get_available_models().keys()))"  # Test model loading
 ```
