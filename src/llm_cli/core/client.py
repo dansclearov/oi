@@ -66,7 +66,7 @@ class LLMClient:
             elif provider_name == "anthropic":
                 model_settings.setdefault(
                     "anthropic_thinking",
-                    {"type": "adaptive"},
+                    {"type": "adaptive", "display": "summarized"},
                 )
             elif provider_name in {"google-gla", "google-vertex"}:
                 model_settings.setdefault(
