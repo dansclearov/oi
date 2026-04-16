@@ -31,15 +31,19 @@
 #   gpt-5:
 #     supports_thinking: true
 #     supports_search: true
+#     supports_vision: true
 #   gpt-5-mini:
 #     supports_thinking: true
 #     supports_search: true
+#     supports_vision: true
 #   o4-mini:
 #     supports_thinking: true
 #     supports_search: true
+#     supports_vision: true
 #   o3:
 #     supports_thinking: true
 #     supports_search: true
+#     supports_vision: true
 
 # OpenRouter models:
 # _openrouter_min_fp8: &openrouter_min_fp8

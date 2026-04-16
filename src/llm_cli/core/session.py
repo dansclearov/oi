@@ -6,12 +6,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from collections.abc import Sequence
+
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
     SystemPromptPart,
     TextPart,
+    UserContent,
     UserPromptPart,
 )
 
@@ -75,6 +78,7 @@ class ChatMetadata:
         self.model_capabilities_snapshot = {
             "supports_search": bool(capabilities.supports_search),
             "supports_thinking": bool(capabilities.supports_thinking),
+            "supports_vision": bool(capabilities.supports_vision),
             "max_tokens": capabilities.max_tokens,
             "extra_params": copy.deepcopy(capabilities.extra_params),
         }
@@ -92,6 +96,7 @@ class ChatMetadata:
         return ModelCapabilities(
             supports_search=bool(raw.get("supports_search", False)),
             supports_thinking=bool(raw.get("supports_thinking", False)),
+            supports_vision=bool(raw.get("supports_vision", False)),
             max_tokens=raw.get("max_tokens"),
             extra_params=safe_extra_params,
         )
@@ -121,7 +126,7 @@ class Chat:
         )
         return cls(metadata=metadata, pending_system_prompt=system_message)
 
-    def append_user_message(self, content: str) -> None:
+    def append_user_message(self, content: str | Sequence[UserContent]) -> None:
         """Append a user message, injecting system prompt if pending."""
         parts = []
         if self.pending_system_prompt:

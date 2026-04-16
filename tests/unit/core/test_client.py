@@ -101,7 +101,7 @@ class TestLLMClient:
         registry.get_model_capabilities.return_value = configured
         client = LLMClient(registry)
 
-        resolved = client._resolve_capabilities("provider:model", override)
+        resolved = client.resolve_capabilities("provider:model", override)
 
         assert resolved is configured
         registry.get_model_capabilities.assert_called_once_with("provider:model")
@@ -116,7 +116,7 @@ class TestLLMClient:
         registry.has_model_config.return_value = False
         client = LLMClient(registry)
 
-        resolved = client._resolve_capabilities("provider:model", override)
+        resolved = client.resolve_capabilities("provider:model", override)
 
         assert resolved is override
         registry.get_model_capabilities.assert_not_called()
@@ -192,7 +192,10 @@ class TestLLMClient:
 
         client.chat([], "sonnet", ChatOptions(silent=True))
 
-        assert captured["model_settings"]["anthropic_thinking"] == {"type": "adaptive"}
+        assert captured["model_settings"]["anthropic_thinking"] == {
+            "type": "adaptive",
+            "display": "summarized",
+        }
 
     def test_chat_keeps_configured_anthropic_thinking_override(self, monkeypatch):
         registry = Mock()

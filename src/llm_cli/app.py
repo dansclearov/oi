@@ -297,22 +297,26 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
     """Run the main chat interaction loop."""
     _print_chat_session_context(current_chat, ctx.prompt_str)
     capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
+    active_capabilities = ctx.llm_client.resolve_capabilities(
+        ctx.active_model, capabilities_override
+    )
 
     # Main interaction loop
     is_idle = True
     while True:
         pending_user_message = False
         try:
-            user_input = ctx.input_handler.get_user_input()
-            normalized_input = user_input.strip()
+            user_input = ctx.input_handler.get_user_input(active_capabilities)
 
-            if not normalized_input:
-                continue
+            if isinstance(user_input, str):
+                normalized_input = user_input.strip()
+                if not normalized_input:
+                    continue
 
-            if _handle_local_command(
-                normalized_input, ctx.config, current_chat, ctx.chat_manager
-            ):
-                continue
+                if _handle_local_command(
+                    normalized_input, ctx.config, current_chat, ctx.chat_manager
+                ):
+                    continue
 
             # Process normal input
             current_chat.append_user_message(user_input)

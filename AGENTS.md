@@ -73,6 +73,7 @@ src/llm_cli/
 ├── ui/                # User interface components
 │   ├── input_handler.py # InputHandler - prompt_toolkit integration
 │   ├── chat_selector.py # ChatSelector - interactive chat picker
+│   ├── image_paste.py # Clipboard image reader + sentinel store + [Image #N] pill Processor
 │   └── labels.py      # Shared ANSI/Rich/prompt-toolkit label styling
 ├── llm_types.py       # Shared chat/model capability dataclasses
 ├── app.py             # Main application orchestration + ChatLoopContext
@@ -101,7 +102,7 @@ Supports OpenAI, Anthropic, DeepSeek, Google Gemini, xAI, and OpenRouter through
 - **Deep merge**: User config merges with defaults at model property level (can add just `extra_params` without repeating all capabilities)
 - **YAML anchors**: Top-level keys starting with `_` are ignored (prevents anchors from being treated as providers)
 - **extra_params support**: Model-specific settings (OpenRouter quantization, OpenAI `openai_reasoning_effort`, etc.) merged into `model_settings` before API calls
-- Per-model settings: `max_tokens`, `supports_search`, `supports_thinking`, `extra_params`
+- Per-model settings: `max_tokens`, `supports_search`, `supports_thinking`, `supports_vision`, `extra_params`
 
 **Configuration & Prompts:**
 Dual-location system:
@@ -121,6 +122,14 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - Shared label/color definitions live in `ui/labels.py` and are reused by plain prints, Rich output, and the prompt label
 - Rich console with `highlight=False` to prevent number styling in LLM output
 - Real-time streaming with interrupt handling
+
+**Image Paste:**
+- `Alt+V` reads a clipboard image (via `wl-paste` / `xclip`) and inserts one sentinel char from the Unicode PUA into the input buffer
+- `ui/image_paste.ImagePillProcessor` renders each sentinel as a styled `[Image #N] ` pill at display time only — the buffer still holds one char, so backspace/vim `x`/word motions treat the pill atomically
+- Pill numbering is derived from sentinel order in the buffer, so deleting one renumbers the rest
+- On submit, `ImagePasteStore.split()` turns the buffer text into an ordered `Sequence[UserContent]` (str + `BinaryContent`) and hands it to `UserPromptPart`; pydantic-ai passes it through to the provider
+- The `Alt+V` binding is only registered when the active model has `supports_vision: true`; `Ctrl+V` is unusable because most terminals (Ghostty, Konsole, iTerm2, …) hijack it for `paste_from_clipboard`
+- `flatten_history` renders `[Image #N]` placeholders for replay of mixed-content messages
 
 **Local Slash Commands:**
 - Local in-chat commands are defined in `local_commands.py`, not inline in `InputHandler`
@@ -178,6 +187,7 @@ Conversation and status labels are centralized in `ui/labels.py`:
 11. Conversation/status label text and colors live in `ui/labels.py`, not `constants.py`
 12. Local slash commands are completed from `local_commands.py`; if you add one, update the command registry there
 13. Slash command completion is readline-like `Tab` completion, not a dropdown selector UI
+14. Image paste uses Unicode PUA sentinel chars in the input buffer; display-only `[Image #N]` expansion via a prompt_toolkit `Processor`. Don't bind `Ctrl+V` — terminals hijack it for paste
 
 **Quick Tests:**
 ```bash

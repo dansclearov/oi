@@ -6,6 +6,8 @@ import json
 from typing import Optional, Sequence
 
 from pydantic_ai.messages import (
+    BinaryContent,
+    ImageUrl,
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
@@ -62,6 +64,27 @@ def convert_legacy_messages(
     return result
 
 
+def _render_user_prompt_content(content: object) -> str:
+    """Render a UserPromptPart.content payload as a display string."""
+    if isinstance(content, str):
+        return content
+
+    if not isinstance(content, (list, tuple)):
+        return str(content)
+
+    rendered: list[str] = []
+    image_index = 0
+    for part in content:
+        if isinstance(part, str):
+            rendered.append(part)
+        elif isinstance(part, (BinaryContent, ImageUrl)):
+            image_index += 1
+            rendered.append(f"[Image #{image_index}] ")
+        else:
+            rendered.append(str(part))
+    return "".join(rendered)
+
+
 def flatten_history(messages: Sequence[ModelMessage]) -> list[tuple[str, str]]:
     """Flatten ModelMessages into (role, content) pairs for UI use."""
     history: list[tuple[str, str]] = []
@@ -70,13 +93,7 @@ def flatten_history(messages: Sequence[ModelMessage]) -> list[tuple[str, str]]:
         if isinstance(message, ModelRequest):
             for part in message.parts:
                 if isinstance(part, UserPromptPart) and part.content:
-                    # Handle both str and Sequence[UserContent] types
-                    content_str = (
-                        part.content
-                        if isinstance(part.content, str)
-                        else str(part.content)
-                    )
-                    history.append(("user", content_str))
+                    history.append(("user", _render_user_prompt_content(part.content)))
         elif isinstance(message, ModelResponse):
             text = "".join(
                 part.content

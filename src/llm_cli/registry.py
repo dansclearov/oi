@@ -91,6 +91,7 @@ class ModelRegistry:
         return ModelCapabilities(
             supports_search=bool(model_config.get("supports_search", False)),
             supports_thinking=bool(model_config.get("supports_thinking", False)),
+            supports_vision=bool(model_config.get("supports_vision", False)),
             max_tokens=_normalize_max_tokens(model_config.get("max_tokens")),
             extra_params=safe_extra_params,
         )

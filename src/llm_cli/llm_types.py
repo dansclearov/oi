@@ -10,6 +10,7 @@ class ModelCapabilities:
 
     supports_search: bool = False
     supports_thinking: bool = False
+    supports_vision: bool = False
     max_tokens: int | None = None
     extra_params: dict[str, Any] = field(default_factory=dict)
 

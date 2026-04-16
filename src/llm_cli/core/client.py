@@ -40,7 +40,7 @@ class LLMClient:
             model_name_or_alias
         )
 
-        capabilities = self._resolve_capabilities(
+        capabilities = self.resolve_capabilities(
             model_name_or_alias,
             capabilities_override,
         )
@@ -123,10 +123,10 @@ class LLMClient:
             signal.signal(signal.SIGINT, old_handler)
             self.interrupt_handler = None
 
-    def _resolve_capabilities(
+    def resolve_capabilities(
         self,
         model_name_or_alias: str,
-        capabilities_override: Optional[ModelCapabilities],
+        capabilities_override: Optional[ModelCapabilities] = None,
     ) -> ModelCapabilities:
         """Use chat snapshot only when the model no longer has config."""
         if capabilities_override is not None and not self.registry.has_model_config(
