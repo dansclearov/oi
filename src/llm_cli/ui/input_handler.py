@@ -1,5 +1,6 @@
 from prompt_toolkit import prompt
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 from prompt_toolkit.cursor_shapes import ModalCursorShapeConfig
 from prompt_toolkit.shortcuts import CompleteStyle
 from pydantic_ai.messages import UserContent
@@ -7,19 +8,22 @@ from pydantic_ai.messages import UserContent
 from llm_cli.llm_types import ModelCapabilities
 from llm_cli.local_commands import SlashCommandCompleter
 from llm_cli.ui.image_paste import (
-    ImagePasteStore,
-    ImagePillProcessor,
+    PasteStore,
+    PillProcessor,
     read_clipboard_image,
 )
 from llm_cli.ui.labels import USER_LABEL, prompt_html_label
+
+PASTE_LINE_THRESHOLD = 6
+PASTE_CHAR_THRESHOLD = 400
 
 
 class InputHandler:
     def __init__(self, config=None):
         self.config = config
         self.command_completer = SlashCommandCompleter()
-        self.image_store = ImagePasteStore()
-        self.pill_processor = ImagePillProcessor(self.image_store)
+        self.paste_store = PasteStore()
+        self.pill_processor = PillProcessor(self.paste_store)
 
     def get_user_input(
         self, capabilities: ModelCapabilities | None = None
@@ -42,6 +46,23 @@ class InputHandler:
         def _(event):
             event.app.exit(exception=KeyboardInterrupt)
 
+        @bindings.add(Keys.BracketedPaste)
+        def _(event):
+            # Large pastes become pills so they don't get clobbered in scrollback
+            # when total content exceeds terminal height (prompt_toolkit's
+            # diff-based renderer can't progressively commit rows to scrollback).
+            # Char threshold catches long single-line paragraphs that wrap.
+            pasted = event.data
+            is_large = (
+                pasted.count("\n") + 1 >= PASTE_LINE_THRESHOLD
+                or len(pasted) >= PASTE_CHAR_THRESHOLD
+            )
+            if is_large:
+                sentinel = self.paste_store.add_text(pasted)
+                event.app.current_buffer.insert_text(sentinel)
+            else:
+                event.app.current_buffer.insert_text(pasted)
+
         if supports_vision:
 
             @bindings.add("escape", "v")
@@ -50,7 +71,7 @@ class InputHandler:
                 if image is None:
                     return
                 data, media_type = image
-                sentinel = self.image_store.add(data, media_type)
+                sentinel = self.paste_store.add_image(data, media_type)
                 event.app.current_buffer.insert_text(sentinel)
 
         try:
@@ -68,20 +89,20 @@ class InputHandler:
                 input_processors=[self.pill_processor],
             )
         except KeyboardInterrupt:
-            self.image_store.reset()
+            self.paste_store.reset()
             raise
         except EOFError:
-            self.image_store.reset()
+            self.paste_store.reset()
             raise KeyboardInterrupt()
 
-        if not self.image_store.has_images or not any(
-            self.image_store.is_sentinel(ch) for ch in user_input
+        if not self.paste_store.has_entries or not any(
+            self.paste_store.is_sentinel(ch) for ch in user_input
         ):
-            self.image_store.reset()
+            self.paste_store.reset()
             return user_input
 
-        parts = self.image_store.split(user_input)
-        self.image_store.reset()
+        parts = self.paste_store.split(user_input)
+        self.paste_store.reset()
         if len(parts) == 1 and isinstance(parts[0], str):
             return parts[0]
         return parts

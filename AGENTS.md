@@ -73,7 +73,7 @@ src/llm_cli/
 ├── ui/                # User interface components
 │   ├── input_handler.py # InputHandler - prompt_toolkit integration
 │   ├── chat_selector.py # ChatSelector - interactive chat picker
-│   ├── image_paste.py # Clipboard image reader + sentinel store + [Image #N] pill Processor
+│   ├── image_paste.py # PasteStore (images + long text) + PillProcessor + clipboard image reader
 │   └── labels.py      # Shared ANSI/Rich/prompt-toolkit label styling
 ├── llm_types.py       # Shared chat/model capability dataclasses
 ├── app.py             # Main application orchestration + ChatLoopContext
@@ -123,13 +123,13 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - Rich console with `highlight=False` to prevent number styling in LLM output
 - Real-time streaming with interrupt handling
 
-**Image Paste:**
-- `Alt+V` reads a clipboard image (via `wl-paste` / `xclip`) and inserts one sentinel char from the Unicode PUA into the input buffer
-- `ui/image_paste.ImagePillProcessor` renders each sentinel as a styled `[Image #N] ` pill at display time only — the buffer still holds one char, so backspace/vim `x`/word motions treat the pill atomically
-- Pill numbering is derived from sentinel order in the buffer, so deleting one renumbers the rest
-- On submit, `ImagePasteStore.split()` turns the buffer text into an ordered `Sequence[UserContent]` (str + `BinaryContent`) and hands it to `UserPromptPart`; pydantic-ai passes it through to the provider
-- The `Alt+V` binding is only registered when the active model has `supports_vision: true`; `Ctrl+V` is unusable because most terminals (Ghostty, Konsole, iTerm2, …) hijack it for `paste_from_clipboard`
-- `flatten_history` renders `[Image #N]` placeholders for replay of mixed-content messages
+**Paste Pills (images + long text):**
+- One unified `PasteStore` in `ui/image_paste.py` allocates Unicode PUA sentinel chars for both kinds of pastes; one sentinel per entry so backspace/vim `x`/word motions treat the pill atomically
+- `PillProcessor` expands each sentinel at display time: image sentinels render as `[Image #N] `, text-paste sentinels as `[Paste #N (L lines)] `. Images and pastes are numbered independently, by first occurrence order in the buffer, so deleting one renumbers the rest
+- Image path: `Alt+V` reads the clipboard (via `wl-paste` / `xclip`) and inserts an image sentinel. Binding is only registered when the active model has `supports_vision: true`. `Ctrl+V` is unusable because most terminals (Ghostty, Konsole, iTerm2, …) hijack it for `paste_from_clipboard`
+- Long-text path: `Keys.BracketedPaste` is intercepted in `InputHandler`; pastes that hit `PASTE_LINE_THRESHOLD` (6 lines) **or** `PASTE_CHAR_THRESHOLD` (400 chars) become a single text-paste sentinel, shorter pastes are inserted verbatim. The char limit catches long single-line paragraphs that wrap across many rendered rows. This works around a prompt_toolkit limitation — its diff-based renderer can't progressively commit rows to the scrollback buffer, so any content that scrolls past terminal height gets permanently clobbered. Pills keep the buffer visually short. The pill label still shows lines (source lines match the user's mental model of what they copied, even though chars drive the trigger)
+- On submit, `PasteStore.split()` walks the buffer: text-paste sentinels expand inline into the surrounding text, image sentinels become `BinaryContent` parts. Returns `str` (text-only) or `list[str | BinaryContent]` (mixed). `UserPromptPart` takes either; pydantic-ai passes through to providers
+- `flatten_history` only needs to handle images (text pastes are just text by submit time) — renders `[Image #N]` placeholders for replay of mixed-content messages
 
 **Local Slash Commands:**
 - Local in-chat commands are defined in `local_commands.py`, not inline in `InputHandler`
@@ -187,7 +187,7 @@ Conversation and status labels are centralized in `ui/labels.py`:
 11. Conversation/status label text and colors live in `ui/labels.py`, not `constants.py`
 12. Local slash commands are completed from `local_commands.py`; if you add one, update the command registry there
 13. Slash command completion is readline-like `Tab` completion, not a dropdown selector UI
-14. Image paste uses Unicode PUA sentinel chars in the input buffer; display-only `[Image #N]` expansion via a prompt_toolkit `Processor`. Don't bind `Ctrl+V` — terminals hijack it for paste
+14. Paste pills (both images and long text) use Unicode PUA sentinel chars in the input buffer; display-only pill expansion via a prompt_toolkit `Processor`. Text pastes expand inline on submit, images become `BinaryContent` parts. Long-text threshold is a fixed `PASTE_LINE_THRESHOLD` in `input_handler.py` (not a function of terminal size — the true failure mode is rendered-rows vs scrollback, which a source-line threshold can only approximate, so the constant is the honest choice). Don't bind `Ctrl+V` — terminals hijack it for paste
 
 **Quick Tests:**
 ```bash
