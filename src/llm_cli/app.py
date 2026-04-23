@@ -105,6 +105,7 @@ class ChatLoopContext:
     input_handler: InputHandler
     chat_options: ChatOptions
     prompt_str: str
+    ephemeral: bool = False
     active_model: str = ""
 
 
@@ -116,9 +117,10 @@ def setup_configuration(args, registry) -> ChatLoopContext:
         enable_search=args.search,
         enable_thinking=not args.no_thinking,
         show_thinking=not args.no_thinking and not args.hide_thinking,
+        show_assistant_label=args.prompt is None,
     )
 
-    prompt_str = read_system_message_from_file("prompt_" + args.prompt + ".txt")
+    prompt_str = read_system_message_from_file("prompt_" + args.system_prompt + ".txt")
 
     return ChatLoopContext(
         config=config,
@@ -127,10 +129,13 @@ def setup_configuration(args, registry) -> ChatLoopContext:
         input_handler=InputHandler(config),
         chat_options=chat_options,
         prompt_str=prompt_str,
+        ephemeral=args.ephemeral,
     )
 
 
-def handle_chat_selection(args, chat_manager: ChatManager) -> Optional[Chat]:
+def handle_chat_selection(
+    args, chat_manager: ChatManager, *, quiet: bool = False
+) -> Optional[Chat]:
     """Handle chat selection/loading based on arguments."""
     current_chat: Optional[Chat] = None
 
@@ -138,12 +143,13 @@ def handle_chat_selection(args, chat_manager: ChatManager) -> Optional[Chat]:
         if args.resume:  # Specific chat ID provided
             try:
                 current_chat = chat_manager.load_chat(args.resume)
-                print(
-                    ansi_message(
-                        INFO_LABEL,
-                        f"Loaded chat: {current_chat.metadata.title}",
+                if not quiet:
+                    print(
+                        ansi_message(
+                            INFO_LABEL,
+                            f"Loaded chat: {current_chat.metadata.title}",
+                        )
                     )
-                )
             except (ChatNotFoundError, FileNotFoundError):
                 print(ansi_message(ERROR_LABEL, f"Chat not found: {args.resume}"))
                 sys.exit(1)
@@ -155,7 +161,7 @@ def handle_chat_selection(args, chat_manager: ChatManager) -> Optional[Chat]:
     elif args.continue_chat:
         # Continue most recent chat
         current_chat = chat_manager.get_last_chat()
-        if not current_chat:
+        if not current_chat and not quiet:
             print(
                 ansi_message(
                     INFO_LABEL, "No previous chats found. Starting new chat..."
@@ -350,13 +356,12 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
             _warn_if_response_hit_output_limit(model_response)
             pending_user_message = False
 
-            _update_title_from_first_user_message(current_chat)
-
-            ctx.chat_manager.save_chat(current_chat)  # Auto-save after each exchange
-
-            _maybe_generate_smart_title(
-                current_chat, ctx.chat_manager, ctx.llm_client, ctx.active_model
-            )
+            if not ctx.ephemeral:
+                _update_title_from_first_user_message(current_chat)
+                ctx.chat_manager.save_chat(current_chat)
+                _maybe_generate_smart_title(
+                    current_chat, ctx.chat_manager, ctx.llm_client, ctx.active_model
+                )
 
             is_idle = True
 
@@ -368,6 +373,65 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
                 print("", flush=True)
             else:
                 break
+
+
+def run_headless_turn(
+    args,
+    ctx: ChatLoopContext,
+    registry: ModelRegistry,
+) -> None:
+    """Send a single message, print the response, and exit."""
+    if args.resume == "":
+        print(
+            ansi_message(
+                ERROR_LABEL,
+                "Headless mode (-p) requires a chat ID with -r; the interactive selector is unavailable.",
+            )
+        )
+        sys.exit(2)
+
+    current_chat = handle_chat_selection(args, ctx.chat_manager, quiet=True)
+    requested_model = registry.resolve_model_name(args.model)
+
+    if current_chat is None:
+        current_chat = ctx.chat_manager.create_new_chat(requested_model, ctx.prompt_str)
+        current_chat.metadata.set_model_capabilities_snapshot(
+            registry.get_model_capabilities(requested_model)
+        )
+
+    ctx.active_model = current_chat.metadata.model
+    capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
+
+    current_chat.append_user_message(args.prompt)
+    try:
+        model_response = ctx.llm_client.chat(
+            current_chat.messages,
+            ctx.active_model,
+            ctx.chat_options,
+            capabilities_override=capabilities_override,
+        )
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception as exc:
+        print(
+            ansi_message(
+                ERROR_LABEL,
+                f"Request failed: {type(exc).__name__}: {exc}",
+            )
+        )
+        sys.exit(1)
+
+    current_chat.append_assistant_response(model_response)
+    _warn_if_response_hit_output_limit(model_response)
+
+    if ctx.ephemeral:
+        return
+
+    _update_title_from_first_user_message(current_chat)
+    ctx.chat_manager.save_chat(current_chat)
+    _maybe_generate_smart_title(
+        current_chat, ctx.chat_manager, ctx.llm_client, ctx.active_model
+    )
 
 
 def _discard_pending_user_message(current_chat: Chat) -> None:
@@ -394,6 +458,10 @@ def main():
     except PromptNotFoundError as e:
         print(ansi_message(ERROR_LABEL, str(e)))
         sys.exit(2)
+
+    if args.prompt is not None:
+        run_headless_turn(args, ctx, registry)
+        return
 
     # Handle chat selection/loading
     current_chat = handle_chat_selection(args, ctx.chat_manager)

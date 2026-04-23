@@ -24,11 +24,11 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description="Run an interactive LLM chat session.")
     parser.add_argument(
-        "prompt",
-        nargs="?",
+        "-P",
+        "--system-prompt",
         choices=available_prompts,
         default=_get_default_prompt_name(available_prompts),
-        help="Specify the system prompt for the chat session",
+        help="Named system prompt to load from the prompts directory",
     )
     parser.add_argument(
         "-m",
@@ -51,6 +51,20 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         dest="continue_chat",
         action="store_true",
         help="Continue the most recent chat",
+    )
+    parser.add_argument(
+        "-p",
+        "--prompt",
+        metavar="MESSAGE",
+        help="Send a single message and exit (headless mode)",
+    )
+    parser.add_argument(
+        "--ephemeral",
+        action="store_true",
+        help=(
+            "Do not persist this session. With -c/-r, runs the turn against "
+            "the existing chat without modifying it."
+        ),
     )
     parser.add_argument(
         "--search",

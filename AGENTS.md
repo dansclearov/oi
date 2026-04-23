@@ -51,8 +51,8 @@ pipx install --force -e . # Reinstall after changes
 
 **Running the application:**
 ```bash
-uv run llm-cli                   # CLI interface with default settings
-uv run llm-cli concise -m sonnet # Use specific prompt and model
+uv run llm-cli                      # CLI interface with default settings
+uv run llm-cli -P concise -m sonnet # Use specific prompt and model
 ```
 
 ## Architecture Overview (Post-Refactoring)
@@ -117,6 +117,13 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - Smart title generation (triggers after 8+ messages)
 - Auto-save functionality
 
+**Headless Mode:**
+- `-p MESSAGE` sends one turn and exits; composes with `-c` / `-r ID` to follow up against existing chats (appends in-place, same chat ID)
+- `--ephemeral` skips all persistence. Combined with `-c` / `-r` it runs a scratch turn against the existing chat's context without modifying it. Works in interactive mode too — the save gate is in `run_chat_loop` via `ctx.ephemeral`
+- `run_headless_turn()` in `app.py` is the headless entry point; `main()` branches to it when `args.prompt is not None`
+- Output cleanups for pipe-friendliness: `AI:` label hidden via `ChatOptions.show_assistant_label=False`, `Loaded chat:` / "No previous chats" chatter suppressed via `handle_chat_selection(quiet=True)`. Thinking traces still render unless `--hide-thinking` is passed (compose them for clean stdout)
+- `-r` without an ID errors in headless — interactive selector is unavailable
+
 **Streaming & Output:**
 - `StyledRenderer` is the only renderer — provides styled thinking traces (NOT markdown rendering!)
 - Shared label/color definitions live in `ui/labels.py` and are reused by plain prints, Rich output, and the prompt label
@@ -155,6 +162,7 @@ Located in `app.py`, broken into logical functions:
 - `handle_chat_selection()` - Chat loading
 - `Chat.create_new()` - New session creation (classmethod on `Chat`)
 - `run_chat_loop(chat, ctx)` - Main interaction (takes `ChatLoopContext`)
+- `run_headless_turn(args, ctx, registry)` - Single-turn headless path (used when `-p` is set)
 - `main()` - High-level orchestration
 
 **Key Constants:**
@@ -193,4 +201,10 @@ Conversation and status labels are centralized in `ui/labels.py`:
 ```bash
 uv run llm-cli --help   # Smoke test
 uv run python -c "from llm_cli.registry import ModelRegistry; print(list(ModelRegistry().get_available_models().keys()))"  # Test model loading
+
+# Headless e2e smoke — `--ephemeral` guarantees no chat dir is written or modified.
+# Use a cheap/fast model and `--no-thinking` for deterministic, grep-friendly output.
+uv run llm-cli -p "say only the word PONG" --ephemeral -m haiku --no-thinking
 ```
+
+Do NOT reach for `-c --ephemeral -p "..."` as a casual smoke test — `-c` loads the user's actual latest chat, so even with `--ephemeral` (no save) you still send their full real conversation to the API and then prompt the model with something unrelated. Waste of tokens, confusing for the model. If you really need to exercise the multi-turn path, create an explicit fixture chat first.

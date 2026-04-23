@@ -44,19 +44,25 @@ Start chatting:
 
 ```bash
 llm-cli
-llm-cli concise -m sonnet
+llm-cli -P concise -m sonnet
 ```
 
 ## Common Commands
 
 ```bash
 # Pick prompt + model
-llm-cli concise -m gpt
+llm-cli -P concise -m gpt
 
 # Continue or resume chats
 llm-cli -c
 llm-cli -r
 llm-cli -r chat_20240622_143022_a1b2c3d4
+
+# Headless: send one message and exit
+llm-cli -p "what's 2+2"
+llm-cli -c -p "follow up on the last chat"
+llm-cli --ephemeral -p "quick question, don't save it"
+llm-cli -c --ephemeral -p "probe an existing chat without dirtying it"
 
 # In-chat local commands
 /bookmark
@@ -104,7 +110,7 @@ Prompts are loaded from:
 1. `~/.config/llm_cli/prompts/` (user overrides)
 2. `src/llm_cli/prompts/` (built-ins)
 
-Naming format is `prompt_<name>.txt`, used as `llm-cli <name>`.
+Naming format is `prompt_<name>.txt`, used as `llm-cli -P <name>`.
 
 Set the default prompt for new chats in `~/.config/llm_cli/config.json`:
 
@@ -114,7 +120,7 @@ Set the default prompt for new chats in `~/.config/llm_cli/config.json`:
 }
 ```
 
-An explicit positional prompt still wins, for example `llm-cli general`.
+An explicit `-P` still wins, for example `llm-cli -P general`.
 
 ## Development
 

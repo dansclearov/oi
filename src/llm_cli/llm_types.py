@@ -22,6 +22,7 @@ class ChatOptions:
     enable_search: bool = False
     enable_thinking: bool = True
     show_thinking: bool = True
+    show_assistant_label: bool = True
     silent: bool = False  # Suppress all console output
 
     extra_settings: dict[str, Any] = field(default_factory=dict)
