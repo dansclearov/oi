@@ -17,6 +17,19 @@ class LabelStyle:
 
 RESET_ANSI = attr("reset")
 
+# Inline pill styling for paste/image placeholders. PT_STYLE is the
+# prompt_toolkit fragment style (used by `PillProcessor` during input);
+# `ansi_pill` wraps text in equivalent ANSI codes (used when echoing
+# canceled or submitted input back to scrollback via plain print).
+PILL_PT_STYLE = "fg:ansicyan bold"
+_PILL_ANSI_OPEN = fg("cyan") + attr("bold")
+
+
+def ansi_pill(text: str) -> str:
+    """Wrap text in the pill (cyan bold) ANSI style."""
+    return f"{_PILL_ANSI_OPEN}{text}{RESET_ANSI}"
+
+
 USER_LABEL = LabelStyle(
     "User: ",
     fg("green") + attr("bold"),

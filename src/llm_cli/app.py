@@ -48,6 +48,7 @@ from llm_cli.ui.labels import (
     USER_LABEL,
     WARNING_LABEL,
     ansi_message,
+    ansi_pill,
 )
 
 load_dotenv()
@@ -90,7 +91,7 @@ def print_user_paths() -> None:
 
 def print_all_messages(messages: Sequence[ModelMessage]) -> None:
     """Print all messages in the conversation history."""
-    for role, content in flatten_history(messages):
+    for role, content in flatten_history(messages, image_wrap=ansi_pill):
         label = USER_LABEL if role == "user" else AI_LABEL
         print(ansi_message(label, content))
 

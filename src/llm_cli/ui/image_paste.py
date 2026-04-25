@@ -21,9 +21,10 @@ from prompt_toolkit.layout.processors import (
 from prompt_toolkit.layout.utils import explode_text_fragments
 from pydantic_ai.messages import BinaryContent
 
+from llm_cli.ui.labels import PILL_PT_STYLE
+
 SENTINEL_BASE = 0xE000
 SENTINEL_MAX = 0xF8FF
-PILL_STYLE = "fg:ansicyan bold"
 SUPPORTED_MEDIA_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
 
 
@@ -150,7 +151,7 @@ class PillProcessor(Processor):
             text = fragment[1]
             pill = pills.get(text)
             if pill is not None:
-                new_fragments.append((PILL_STYLE, pill))
+                new_fragments.append((PILL_PT_STYLE, pill))
                 sentinel_widths[src_idx] = len(pill)
             else:
                 new_fragments.append((style, text))

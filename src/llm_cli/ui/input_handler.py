@@ -1,10 +1,10 @@
-from prompt_toolkit import prompt
+from prompt_toolkit.cursor_shapes import ModalCursorShapeConfig
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
-from prompt_toolkit.cursor_shapes import ModalCursorShapeConfig
-from prompt_toolkit.shortcuts import CompleteStyle
+from prompt_toolkit.shortcuts import CompleteStyle, PromptSession
 from pydantic_ai.messages import UserContent
 
+from llm_cli.core.message_utils import render_user_prompt_content
 from llm_cli.llm_types import ModelCapabilities
 from llm_cli.local_commands import SlashCommandCompleter
 from llm_cli.ui.image_paste import (
@@ -12,7 +12,7 @@ from llm_cli.ui.image_paste import (
     PillProcessor,
     read_clipboard_image,
 )
-from llm_cli.ui.labels import USER_LABEL, prompt_html_label
+from llm_cli.ui.labels import USER_LABEL, ansi_message, ansi_pill, prompt_html_label
 
 PASTE_LINE_THRESHOLD = 6
 PASTE_CHAR_THRESHOLD = 400
@@ -31,6 +31,9 @@ class InputHandler:
         """Get user input. Returns a plain str, or a list mixing text and images."""
         supports_vision = bool(capabilities and capabilities.supports_vision)
         bindings = KeyBindings()
+        # Captured at Ctrl+C so we can echo the canceled buffer to scrollback
+        # (erase_when_done wipes the prompt area on exit, including on cancel).
+        canceled_text: dict[str, str] = {"value": ""}
 
         @bindings.add("c-m")  # Enter key
         def _(event):
@@ -44,6 +47,7 @@ class InputHandler:
 
         @bindings.add("c-c")  # Ctrl+C
         def _(event):
+            canceled_text["value"] = event.app.current_buffer.text
             event.app.exit(exception=KeyboardInterrupt)
 
         @bindings.add(Keys.BracketedPaste)
@@ -77,7 +81,7 @@ class InputHandler:
         try:
             vim_mode = self.config.vim_mode if self.config else False
             cursor_config = ModalCursorShapeConfig() if vim_mode else None
-            user_input = prompt(
+            session = PromptSession(
                 prompt_html_label(USER_LABEL),
                 multiline=True,
                 key_bindings=bindings,
@@ -87,22 +91,48 @@ class InputHandler:
                 completer=self.command_completer,
                 complete_style=CompleteStyle.READLINE_LIKE,
                 input_processors=[self.pill_processor],
+                erase_when_done=True,
             )
+            user_input = session.prompt()
         except KeyboardInterrupt:
+            canceled = canceled_text["value"]
+            pills = (
+                self.paste_store.pill_text(canceled)
+                if self.paste_store.has_entries
+                else {}
+            )
+            displayed = "".join(
+                ansi_pill(pills[ch]) if ch in pills else ch for ch in canceled
+            )
+            print(ansi_message(USER_LABEL, displayed))
             self.paste_store.reset()
             raise
         except EOFError:
             self.paste_store.reset()
             raise KeyboardInterrupt()
 
-        if not self.paste_store.has_entries or not any(
+        has_pills = self.paste_store.has_entries and any(
             self.paste_store.is_sentinel(ch) for ch in user_input
-        ):
-            self.paste_store.reset()
-            return user_input
+        )
+        parts: list[str | UserContent] | None = None
+        if has_pills:
+            parts = self.paste_store.split(user_input)
+            display_text = render_user_prompt_content(parts, image_wrap=ansi_pill)
+        else:
+            display_text = user_input
 
-        parts = self.paste_store.split(user_input)
         self.paste_store.reset()
+
+        # Reprint the prompt line ourselves so the scrollback shows the fully
+        # expanded message instead of the [Paste #N] / [Image #N] pills that
+        # prompt_toolkit was rendering. erase_when_done=True wiped its draw,
+        # and this print uses a normal terminal write — sidestepping
+        # prompt_toolkit's diff renderer and its scrollback-clobbering issue.
+        if display_text.strip():
+            print(ansi_message(USER_LABEL, display_text))
+
+        if parts is None:
+            return user_input
         if len(parts) == 1 and isinstance(parts[0], str):
             return parts[0]
         return parts
