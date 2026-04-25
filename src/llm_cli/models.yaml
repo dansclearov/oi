@@ -13,6 +13,10 @@ anthropic:
     supports_thinking: true
     supports_vision: true
     max_tokens: 128000
+    extra_params:
+      anthropic_cache_instructions: '5m'
+      anthropic_cache_messages: '5m'
+      anthropic_cache_tool_definitions: '5m'
   claude-haiku-4-5:
     supports_search: true
     supports_thinking: true
@@ -20,11 +24,18 @@ anthropic:
     max_tokens: 64000
     extra_params:
       anthropic_thinking: {type: enabled, budget_tokens: 2048}
+      anthropic_cache_instructions: '5m'
+      anthropic_cache_messages: '5m'
+      anthropic_cache_tool_definitions: '5m'
   claude-opus-4-7:
     supports_search: true
     supports_thinking: true
     supports_vision: true
     max_tokens: 128000
+    extra_params:
+      anthropic_cache_instructions: '5m'
+      anthropic_cache_messages: '5m'
+      anthropic_cache_tool_definitions: '5m'
 
 openai-responses:
   gpt-5.4:
