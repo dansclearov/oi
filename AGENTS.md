@@ -51,15 +51,15 @@ pipx install --force -e . # Reinstall after changes
 
 **Running the application:**
 ```bash
-uv run llm-cli                      # CLI interface with default settings
-uv run llm-cli -P concise -m sonnet # Use specific prompt and model
+uv run oi                      # CLI interface with default settings
+uv run oi -P concise -m sonnet # Use specific prompt and model
 ```
 
 ## Architecture Overview (Post-Refactoring)
 
 **Directory Structure:**
 ```
-src/llm_cli/
+src/oi/
 ├── core/              # Core business logic
 │   ├── client.py      # LLMClient - API calls & retry logic
 │   ├── session.py     # Chat & ChatMetadata - data models + Chat.create_new()
@@ -97,8 +97,8 @@ Supports OpenAI, Anthropic, DeepSeek, Google Gemini, xAI, and OpenRouter through
 - Cross-provider aliases supported
 
 **Model Configuration:**
-- **Minimal default config**: `src/llm_cli/models.yaml` contains only latest SOTA models with date-free aliases
-- **Auto-generated user config**: `~/.config/llm_cli/models.yaml` created on first run from `models_template.yaml`
+- **Minimal default config**: `src/oi/models.yaml` contains only latest SOTA models with date-free aliases
+- **Auto-generated user config**: `~/.config/oi/models.yaml` created on first run from `models_template.yaml`
 - **Deep merge**: User config merges with defaults at model property level (can add just `extra_params` without repeating all capabilities)
 - **YAML anchors**: Top-level keys starting with `_` are ignored (prevents anchors from being treated as providers)
 - **extra_params support**: Model-specific settings (OpenRouter quantization, OpenAI `openai_reasoning_effort`, etc.) merged into `model_settings` before API calls
@@ -106,8 +106,8 @@ Supports OpenAI, Anthropic, DeepSeek, Google Gemini, xAI, and OpenRouter through
 
 **Configuration & Prompts:**
 Dual-location system:
-1. User config directory (`~/.config/llm_cli/prompts/`) - takes precedence
-2. Package built-in prompts (`src/llm_cli/prompts/`)
+1. User config directory (`~/.config/oi/prompts/`) - takes precedence
+2. Package built-in prompts (`src/oi/prompts/`)
 
 Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_file()`
 
@@ -187,10 +187,10 @@ Conversation and status labels are centralized in `ui/labels.py`:
    - **Claude Haiku 4.5** overrides this via `extra_params: {anthropic_thinking: {type: enabled, budget_tokens: 2048}}` in `models.yaml` because it still requires the explicit budget.
    - Google Gemini models default to `google_thinking_config={"include_thoughts": True}` when thinking is enabled so their thoughts stream into the UI.
 6. Reasoning-focused OpenAI models (gpt-5, o-series) should be defined under the `openai-responses` provider section so the Responses API (with thinking traces) is used.
-7. `--search` wires up Pydantic AI's `WebSearchTool` only for providers that support it (OpenAI Responses, Anthropic, Gemini). OpenRouter models automatically switch to their `:online` variant and add the `web` plugin so search works there too; other providers simply ignore the flag.
+7. `--search` wires up Pydantic AI's `WebSearchTool` only for providers that support it (OpenAI Responses, Anthropic, Gemini, xAI). OpenRouter models automatically switch to their `:online` variant and add the `web` plugin so search works there too; other providers simply ignore the flag.
 8. Rich console has `highlight=False` to prevent auto-styling numbers
 9. User config functions (`load_user_config`, `update_user_config`) live in `config/settings.py`, not a separate file
-10. Prompts loaded from `src/llm_cli/prompts/` directory, not a Python package
+10. Prompts loaded from `src/oi/prompts/` directory, not a Python package
 10. Custom exceptions in `exceptions.py` for proper error handling
 11. Conversation/status label text and colors live in `ui/labels.py`, not `constants.py`
 12. Local slash commands are completed from `local_commands.py`; if you add one, update the command registry there
@@ -199,12 +199,12 @@ Conversation and status labels are centralized in `ui/labels.py`:
 
 **Quick Tests:**
 ```bash
-uv run llm-cli --help   # Smoke test
-uv run python -c "from llm_cli.registry import ModelRegistry; print(list(ModelRegistry().get_available_models().keys()))"  # Test model loading
+uv run oi --help   # Smoke test
+uv run python -c "from oi.registry import ModelRegistry; print(list(ModelRegistry().get_available_models().keys()))"  # Test model loading
 
 # Headless e2e smoke — `--ephemeral` guarantees no chat dir is written or modified.
 # Use a cheap/fast model and `--no-thinking` for deterministic, grep-friendly output.
-uv run llm-cli -p "say only the word PONG" --ephemeral -m haiku --no-thinking
+uv run oi -p "say only the word PONG" --ephemeral -m haiku --no-thinking
 ```
 
 Do NOT reach for `-c --ephemeral -p "..."` as a casual smoke test — `-c` loads the user's actual latest chat, so even with `--ephemeral` (no save) you still send their full real conversation to the API and then prompt the model with something unrelated. Waste of tokens, confusing for the model. If you really need to exercise the multi-turn path, create an explicit fixture chat first.

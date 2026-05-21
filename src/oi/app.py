@@ -9,38 +9,38 @@ from typing import Optional, Sequence
 from dotenv import load_dotenv
 from platformdirs import user_config_dir, user_data_dir
 
-from llm_cli.cli import parse_arguments
-from llm_cli.config.settings import Config, update_user_config
-from llm_cli.constants import (
+from oi.cli import parse_arguments
+from oi.config.settings import Config, update_user_config
+from oi.constants import (
     MAX_TITLE_LENGTH,
     MIN_MESSAGES_FOR_SMART_TITLE,
 )
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
 
-from llm_cli.core.chat_manager import ChatManager
-from llm_cli.core.client import LLMClient
-from llm_cli.core.message_utils import (
+from oi.core.chat_manager import ChatManager
+from oi.core.client import LLMClient
+from oi.core.message_utils import (
     count_non_system_messages,
     flatten_history,
     latest_system_prompt,
 )
-from llm_cli.core.session import Chat
-from llm_cli.exceptions import (
+from oi.core.session import Chat
+from oi.exceptions import (
     ChatNotFoundError,
     ModelNotFoundError,
     PromptNotFoundError,
 )
-from llm_cli.local_commands import (
+from oi.local_commands import (
     LOCAL_COMMANDS,
     build_argument_error_message,
     build_unknown_command_message,
     parse_local_command,
 )
-from llm_cli.prompts import read_system_message_from_file
-from llm_cli.llm_types import ChatOptions
-from llm_cli.registry import ModelRegistry
-from llm_cli.ui.input_handler import InputHandler
-from llm_cli.ui.labels import (
+from oi.prompts import read_system_message_from_file
+from oi.llm_types import ChatOptions
+from oi.registry import ModelRegistry
+from oi.ui.input_handler import InputHandler
+from oi.ui.labels import (
     AI_LABEL,
     ERROR_LABEL,
     INFO_LABEL,
@@ -56,8 +56,8 @@ load_dotenv()
 
 def print_user_paths() -> None:
     """Print all user path locations used by the application."""
-    config_dir = Path(user_config_dir("llm_cli", ensure_exists=True))
-    data_dir = Path(user_data_dir("llm_cli", ensure_exists=True))
+    config_dir = Path(user_config_dir("oi", ensure_exists=True))
+    data_dir = Path(user_data_dir("oi", ensure_exists=True))
 
     # Configuration directory
     print(f"Configuration directory: {config_dir}")
@@ -66,13 +66,13 @@ def print_user_paths() -> None:
     print(f"  - User model overrides: {config_dir / 'models.yaml'}")
 
     # Data directory
-    chat_dir = os.getenv("LLM_CLI_CHAT_DIR", str(data_dir / "chats"))
+    chat_dir = os.getenv("OI_CHAT_DIR", str(data_dir / "chats"))
     print(f"Data directory: {data_dir}")
     print(f"  - Chat storage: {chat_dir}")
 
     # Environment variable overrides
     print("\nEnvironment variable overrides:")
-    print(f"  - LLM_CLI_CHAT_DIR: {os.getenv('LLM_CLI_CHAT_DIR', 'not set')}")
+    print(f"  - OI_CHAT_DIR: {os.getenv('OI_CHAT_DIR', 'not set')}")
 
     # Show which paths currently exist
     print("\nCurrent status:")

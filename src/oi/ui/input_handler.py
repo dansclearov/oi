@@ -4,15 +4,15 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.shortcuts import CompleteStyle, PromptSession
 from pydantic_ai.messages import UserContent
 
-from llm_cli.core.message_utils import render_user_prompt_content
-from llm_cli.llm_types import ModelCapabilities
-from llm_cli.local_commands import SlashCommandCompleter
-from llm_cli.ui.image_paste import (
+from oi.core.message_utils import render_user_prompt_content
+from oi.llm_types import ModelCapabilities
+from oi.local_commands import SlashCommandCompleter
+from oi.ui.image_paste import (
     PasteStore,
     PillProcessor,
     read_clipboard_image,
 )
-from llm_cli.ui.labels import USER_LABEL, ansi_message, ansi_pill, prompt_html_label
+from oi.ui.labels import USER_LABEL, ansi_message, ansi_pill, prompt_html_label
 
 PASTE_LINE_THRESHOLD = 6
 PASTE_CHAR_THRESHOLD = 400

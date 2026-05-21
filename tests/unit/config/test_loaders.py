@@ -3,8 +3,8 @@ from unittest.mock import patch, mock_open
 import pytest
 from importlib import resources
 
-from llm_cli.config.loaders import load_models_and_aliases
-from llm_cli.exceptions import ConfigurationError
+from oi.config.loaders import load_models_and_aliases
+from oi.exceptions import ConfigurationError
 
 
 class TestLoadModelsAndAliases:
@@ -19,8 +19,8 @@ class TestLoadModelsAndAliases:
             "aliases": {"default": "openai/gpt-4o", "fast": "openai/gpt-4o"},
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=False):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=False):
                 mock_files.return_value.joinpath.return_value.open.return_value.__enter__.return_value = yaml.dump(
                     package_config
                 )
@@ -52,8 +52,8 @@ class TestLoadModelsAndAliases:
             },
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=True):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=True):
                 with patch(
                     "builtins.open", mock_open(read_data=yaml.dump(user_config))
                 ):
@@ -79,7 +79,7 @@ class TestLoadModelsAndAliases:
                     assert default_model == "claude-3-5-sonnet"
 
     def test_invalid_yaml_package(self):
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
+        with patch("oi.config.loaders.resources.files") as mock_files:
             mock_files.return_value.joinpath.return_value.open.return_value.__enter__.return_value.read.return_value = "invalid: yaml: content: ["
 
             with pytest.raises(ConfigurationError) as exc_info:
@@ -93,8 +93,8 @@ class TestLoadModelsAndAliases:
             "aliases": {"default": "openai/gpt-4o"},
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=True):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=True):
                 with patch("builtins.open", mock_open(read_data="invalid: yaml: [")):
                     mock_files.return_value.joinpath.return_value.open.return_value.__enter__.return_value = yaml.dump(
                         package_config
@@ -106,7 +106,7 @@ class TestLoadModelsAndAliases:
                     assert "Invalid YAML in user models.yaml" in str(exc_info.value)
 
     def test_missing_package_config(self):
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
+        with patch("oi.config.loaders.resources.files") as mock_files:
             mock_files.return_value.joinpath.return_value.open.side_effect = (
                 FileNotFoundError()
             )
@@ -127,8 +127,8 @@ class TestLoadModelsAndAliases:
             },
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=False):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=False):
                 mock_files.return_value.joinpath.return_value.open.return_value.__enter__.return_value = yaml.dump(
                     config
                 )
@@ -148,8 +148,8 @@ class TestLoadModelsAndAliases:
             "aliases": {"default": "openrouter/deepseek/deepseek-r1-0528"},
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=False):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=False):
                 mock_files.return_value.joinpath.return_value.open.return_value.__enter__.return_value = yaml.dump(
                     config
                 )
@@ -172,8 +172,8 @@ class TestLoadModelsAndAliases:
             "anthropic": {"claude-3": {"supports_thinking": True}},  # New section
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=True):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=True):
                 with patch(
                     "builtins.open", mock_open(read_data=yaml.dump(user_config))
                 ):
@@ -189,7 +189,7 @@ class TestLoadModelsAndAliases:
                     assert "claude-3" in model_map
 
     def test_package_alias_targets_exist(self):
-        with resources.files("llm_cli").joinpath("models.yaml").open("r") as f:
+        with resources.files("oi").joinpath("models.yaml").open("r") as f:
             config = yaml.safe_load(f) or {}
 
         providers = {
@@ -215,8 +215,8 @@ class TestLoadModelsAndAliases:
             "aliases": ["not-a-mapping"],
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=False):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=False):
                 mock_files.return_value.joinpath.return_value.open.return_value.__enter__.return_value = yaml.dump(
                     config
                 )
@@ -232,8 +232,8 @@ class TestLoadModelsAndAliases:
             "aliases": {"default": "missing-model"},
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=False):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=False):
                 mock_files.return_value.joinpath.return_value.open.return_value.__enter__.return_value = yaml.dump(
                     config
                 )
@@ -250,8 +250,8 @@ class TestLoadModelsAndAliases:
             "aliases": {"default": "openai/shared-model"},
         }
 
-        with patch("llm_cli.config.loaders.resources.files") as mock_files:
-            with patch("llm_cli.config.loaders.Path.exists", return_value=False):
+        with patch("oi.config.loaders.resources.files") as mock_files:
+            with patch("oi.config.loaders.Path.exists", return_value=False):
                 mock_files.return_value.joinpath.return_value.open.return_value.__enter__.return_value = yaml.dump(
                     config
                 )

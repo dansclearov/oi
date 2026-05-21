@@ -1,6 +1,6 @@
-from llm_cli.config.settings import Config
-from llm_cli.core.client import LLMClient
-from llm_cli.registry import ModelRegistry
+from oi.config.settings import Config
+from oi.core.client import LLMClient
+from oi.registry import ModelRegistry
 
 
 # Test Config

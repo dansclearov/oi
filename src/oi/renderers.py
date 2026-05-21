@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from rich.console import Console
 from rich.markup import escape
 
-from llm_cli.llm_types import ChatOptions, ModelCapabilities
-from llm_cli.ui.labels import AI_LABEL, rich_label
+from oi.llm_types import ChatOptions, ModelCapabilities
+from oi.ui.labels import AI_LABEL, rich_label
 
 
 class ResponseRenderer(ABC):

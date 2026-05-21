@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
-from llm_cli.core.session import ChatMetadata
-from llm_cli.ui.chat_selector import ChatSelector
+from oi.core.session import ChatMetadata
+from oi.ui.chat_selector import ChatSelector
 
 
 def _chat_metadata(chat_id: str, minutes_ago: int = 0) -> ChatMetadata:

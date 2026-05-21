@@ -4,13 +4,13 @@ import json
 from typing import Optional, Sequence
 
 from pydantic_ai.messages import (
-    BuiltinToolCallPart,
-    BuiltinToolReturnPart,
     FilePart,
     FinalResultEvent,
     ModelResponse,
     ModelResponsePart,
     ModelResponseStreamEvent,
+    NativeToolCallPart,
+    NativeToolReturnPart,
     PartDeltaEvent,
     PartEndEvent,
     PartStartEvent,
@@ -23,8 +23,8 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 
-from llm_cli.llm_types import ChatOptions, ModelCapabilities
-from llm_cli.renderers import ResponseRenderer, StyledRenderer
+from oi.llm_types import ChatOptions, ModelCapabilities
+from oi.renderers import ResponseRenderer, StyledRenderer
 
 
 class ResponseHandler:
@@ -82,8 +82,8 @@ class ResponseHandler:
             self.renderer.render_text(part.content)
         elif isinstance(part, ThinkingPart):
             self.renderer.render_thinking(part.content)
-        elif isinstance(part, BuiltinToolCallPart | BuiltinToolReturnPart):
-            return  # Suppress built-in tool chatter (web_search, etc.)
+        elif isinstance(part, NativeToolCallPart | NativeToolReturnPart):
+            return  # Suppress native tool chatter (web_search, etc.)
         elif isinstance(part, ToolCallPart):
             if self._should_suppress_tool(part.tool_name):
                 return

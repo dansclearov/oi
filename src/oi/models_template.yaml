@@ -87,5 +87,5 @@
 # -------------------------------------------------------------------
 # Additional pydantic-ai providers:
 # azure, bedrock, cerebras, cohere, deepseek, fireworks, gateway,
-# github, google-vertex, heroku, huggingface, litellm, mistral,
+# github, google, google-cloud, heroku, huggingface, litellm, mistral,
 # nebius, ollama, outlines, ovhcloud, together, vercel

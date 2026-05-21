@@ -12,15 +12,15 @@ from typing import Callable, Optional
 from rich.console import Console
 from rich.live import Live
 
-from llm_cli.constants import (
+from oi.constants import (
     DEFAULT_PAGE_SIZE,
     INITIAL_PAGE,
     INITIAL_SELECTED_INDEX,
     MAX_TITLE_LENGTH,
     NAVIGATION_KEYS,
 )
-from llm_cli.core.session import Chat, ChatMetadata
-from llm_cli.ui.labels import INFO_LABEL, rich_message
+from oi.core.session import Chat, ChatMetadata
+from oi.ui.labels import INFO_LABEL, rich_message
 
 
 class ChatSelector:

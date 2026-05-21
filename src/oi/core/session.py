@@ -18,10 +18,10 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from llm_cli.core.message_utils import (
+from oi.core.message_utils import (
     count_non_system_messages,
 )
-from llm_cli.llm_types import ModelCapabilities
+from oi.llm_types import ModelCapabilities
 
 
 @dataclass

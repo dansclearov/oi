@@ -1,8 +1,8 @@
 import argparse
 
-from llm_cli.config.settings import load_user_config
-from llm_cli.prompts import get_prompts
-from llm_cli.registry import ModelRegistry
+from oi.config.settings import load_user_config
+from oi.prompts import get_prompts
+from oi.registry import ModelRegistry
 
 
 DEFAULT_PROMPT_NAME = "general"

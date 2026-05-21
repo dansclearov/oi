@@ -8,13 +8,13 @@ from typing import Any
 import yaml
 from platformdirs import user_config_dir
 
-from llm_cli.constants import DEFAULT_FALLBACK_MODEL
-from llm_cli.exceptions import ConfigurationError
+from oi.constants import DEFAULT_FALLBACK_MODEL
+from oi.exceptions import ConfigurationError
 
 
 def _ensure_user_config() -> Path:
     """Ensure user config directory exists and create default models.yaml if missing."""
-    config_dir = Path(user_config_dir("llm_cli"))
+    config_dir = Path(user_config_dir("oi"))
     config_dir.mkdir(parents=True, exist_ok=True)
 
     user_config_path = config_dir / "models.yaml"
@@ -22,7 +22,7 @@ def _ensure_user_config() -> Path:
         # Copy template to user config
         try:
             template_content = (
-                resources.files("llm_cli").joinpath("models_template.yaml").read_text()
+                resources.files("oi").joinpath("models_template.yaml").read_text()
             )
             user_config_path.write_text(template_content)
         except Exception:
@@ -85,7 +85,7 @@ def _merge_model_configs(
 def load_merged_model_config() -> dict[str, Any]:
     """Load and merge package + user models.yaml configuration."""
     try:
-        with resources.files("llm_cli").joinpath("models.yaml").open("r") as f:
+        with resources.files("oi").joinpath("models.yaml").open("r") as f:
             package_config = yaml.safe_load(f) or {}
     except FileNotFoundError:
         raise ConfigurationError("models.yaml not found")

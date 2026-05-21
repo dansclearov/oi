@@ -5,13 +5,13 @@ from typing import Optional
 
 from rich.console import Console
 
-from llm_cli.config.settings import Config
-from llm_cli.core.chat_repository import ChatRepository
-from llm_cli.core.smart_title import SmartTitleGenerator
-from llm_cli.core.session import Chat, ChatMetadata
-from llm_cli.exceptions import ChatNotFoundError
-from llm_cli.ui.chat_selector import ChatSelector
-from llm_cli.ui.labels import ERROR_LABEL, WARNING_LABEL, rich_message
+from oi.config.settings import Config
+from oi.core.chat_repository import ChatRepository
+from oi.core.smart_title import SmartTitleGenerator
+from oi.core.session import Chat, ChatMetadata
+from oi.exceptions import ChatNotFoundError
+from oi.ui.chat_selector import ChatSelector
+from oi.ui.labels import ERROR_LABEL, WARNING_LABEL, rich_message
 
 
 class ChatManager:

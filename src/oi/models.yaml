@@ -4,8 +4,8 @@ aliases:
   haiku: anthropic/claude-haiku-4-5
   opus: anthropic/claude-opus-4-7
   gpt: openai-responses/gpt-5.5
-  gemini-pro: google-gla/gemini-3.1-pro-preview
-  gemini-flash: google-gla/gemini-3.5-flash
+  gemini-pro: google/gemini-3.1-pro-preview
+  gemini-flash: google/gemini-3.5-flash
 
 anthropic:
   claude-sonnet-4-6:
@@ -43,7 +43,7 @@ openai-responses:
     supports_search: true
     supports_vision: true
 
-google-gla:
+google:
   gemini-3.1-pro-preview:
     supports_thinking: true
     supports_search: true

@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
-from llm_cli.exceptions import ModelNotFoundError
-from llm_cli.registry import ModelRegistry
+from oi.exceptions import ModelNotFoundError
+from oi.registry import ModelRegistry
 
 
 def _mock_config(providers: dict, aliases: dict | None = None):
@@ -23,7 +23,7 @@ def _mock_config(providers: dict, aliases: dict | None = None):
 class TestModelRegistry:
     def test_get_provider_for_model_success(self):
         config = _mock_config({"test": {"test-model": {}}})
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             provider, model_id = registry.get_provider_for_model("test-model")
 
@@ -35,7 +35,7 @@ class TestModelRegistry:
             {"provider": {"model": {}}},
             aliases={"default": "provider/model", "alias": "provider/model"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             provider, model_id = registry.get_provider_for_model("provider:model")
 
@@ -44,7 +44,7 @@ class TestModelRegistry:
 
     def test_get_provider_for_model_not_found(self):
         config = _mock_config({"p": {"m": {}}})
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
 
             with pytest.raises(ModelNotFoundError) as exc_info:
@@ -57,7 +57,7 @@ class TestModelRegistry:
             {"provider": {"model": {}}},
             aliases={"default": "provider/model", "alias": "provider/model"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             assert registry.resolve_model_name("alias") == "provider:model"
 
@@ -66,7 +66,7 @@ class TestModelRegistry:
             {"provider": {"model": {}}},
             aliases={"default": "provider/model", "alias": "provider/model"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             assert registry.resolve_model_name("provider:model") == "provider:model"
 
@@ -75,7 +75,7 @@ class TestModelRegistry:
             {"provider1": {"model1": {}}, "provider2": {"model2": {}}},
             aliases={"default": "provider1/model1"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             models = registry.get_available_models()
 
@@ -89,7 +89,7 @@ class TestModelRegistry:
             {"test": {"test-default": {}}},
             aliases={"default": "test/test-default"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             assert registry.get_default_model() == "test-default"
 
@@ -98,7 +98,7 @@ class TestModelRegistry:
             {"provider": {"model": {"supports_search": True}}},
             aliases={"default": "provider/model", "alias": "provider/model"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             capabilities = registry.get_model_capabilities("alias")
             assert capabilities.supports_search is True
@@ -110,7 +110,7 @@ class TestModelRegistry:
             {"provider": {"model": {"supports_thinking": True, "max_tokens": 16384}}},
             aliases={"default": "provider/model", "alias": "provider/model"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             capabilities = registry.get_model_capabilities("provider:model")
             assert capabilities.supports_search is False
@@ -129,7 +129,7 @@ class TestModelRegistry:
                 }
             },
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             caps = registry.get_model_capabilities("model")
 
@@ -143,7 +143,7 @@ class TestModelRegistry:
 
     def test_get_model_capabilities_ignores_invalid_max_tokens(self):
         config = _mock_config({"provider": {"model": {"max_tokens": 0}}})
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             caps = registry.get_model_capabilities("model")
             assert caps.max_tokens is None
@@ -153,7 +153,7 @@ class TestModelRegistry:
             {"provider": {"model": {}}},
             aliases={"default": "provider/model", "alias": "provider/model"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             assert registry.has_model_config("alias") is True
 
@@ -162,7 +162,7 @@ class TestModelRegistry:
             {"provider": {"other": {}}},
             aliases={"default": "provider/other", "alias": "provider/other"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             # Use provider:model syntax to bypass model map
             assert registry.has_model_config("provider:model") is False
@@ -172,7 +172,7 @@ class TestModelRegistry:
             {"openai": {"gpt-4o": {}}},
             aliases={"default": "openai/gpt-4o", "fast": "openai/gpt-4o"},
         )
-        with patch("llm_cli.registry.load_merged_model_config", return_value=config):
+        with patch("oi.registry.load_merged_model_config", return_value=config):
             registry = ModelRegistry()
             models = registry.get_display_models()
 

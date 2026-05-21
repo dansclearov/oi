@@ -4,15 +4,15 @@ import time
 from dataclasses import replace
 from typing import Optional, Sequence
 
-from pydantic_ai.builtin_tools import WebSearchTool
 from pydantic_ai.direct import model_request_stream
+from pydantic_ai.native_tools import WebSearchTool
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 
-from llm_cli.llm_types import ChatOptions, ModelCapabilities
-from llm_cli.registry import ModelRegistry
-from llm_cli.response_handler import ResponseHandler
+from oi.llm_types import ChatOptions, ModelCapabilities
+from oi.registry import ModelRegistry
+from oi.response_handler import ResponseHandler
 
 MAX_CHAT_ATTEMPTS = 3
 RETRY_WAIT_MIN_SECONDS = 4
@@ -68,7 +68,7 @@ class LLMClient:
                     "anthropic_thinking",
                     {"type": "adaptive", "display": "summarized"},
                 )
-            elif provider_name in {"google-gla", "google-vertex"}:
+            elif provider_name in {"google", "google-cloud"}:
                 model_settings.setdefault(
                     "google_thinking_config",
                     {"include_thoughts": True},
@@ -225,8 +225,8 @@ class LLMClient:
     _BUILTIN_SEARCH_PROVIDERS = {
         "anthropic",
         "openai-responses",
-        "google-gla",
-        "google-vertex",
+        "google",
+        "google-cloud",
         "xai",
     }
 
@@ -236,14 +236,14 @@ class LLMClient:
         capabilities: ModelCapabilities,
         options: ChatOptions,
     ) -> ModelRequestParameters:
-        """Create provider-specific request parameters (built-in tools, etc.)."""
-        builtin_tools = []
+        """Create provider-specific request parameters (native tools, etc.)."""
+        native_tools = []
 
         if (
             options.enable_search
             and capabilities.supports_search
             and provider_name in self._BUILTIN_SEARCH_PROVIDERS
         ):
-            builtin_tools.append(WebSearchTool())
+            native_tools.append(WebSearchTool())
 
-        return ModelRequestParameters(builtin_tools=builtin_tools)
+        return ModelRequestParameters(native_tools=native_tools)

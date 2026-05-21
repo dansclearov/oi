@@ -2,8 +2,8 @@ import pytest
 from unittest.mock import Mock
 from pydantic_ai.messages import ModelResponse, TextPart
 
-from llm_cli.core.client import LLMClient
-from llm_cli.llm_types import ChatOptions, ModelCapabilities
+from oi.core.client import LLMClient
+from oi.llm_types import ChatOptions, ModelCapabilities
 
 
 class TestLLMClient:
@@ -41,7 +41,7 @@ class TestLLMClient:
         handler = Mock()
         handler.has_visible_output.return_value = False
         sleep_calls = []
-        monkeypatch.setattr("llm_cli.core.client.time.sleep", sleep_calls.append)
+        monkeypatch.setattr("oi.core.client.time.sleep", sleep_calls.append)
 
         attempts = {"count": 0}
         result = object()
@@ -72,7 +72,7 @@ class TestLLMClient:
         client = LLMClient(Mock())
         handler = Mock()
         handler.has_visible_output.return_value = True
-        monkeypatch.setattr("llm_cli.core.client.time.sleep", Mock())
+        monkeypatch.setattr("oi.core.client.time.sleep", Mock())
 
         attempts = {"count": 0}
 

@@ -5,8 +5,8 @@ from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
 from prompt_toolkit.shortcuts import CompleteStyle
 
-from llm_cli.local_commands import SlashCommandCompleter
-from llm_cli.ui.input_handler import InputHandler
+from oi.local_commands import SlashCommandCompleter
+from oi.ui.input_handler import InputHandler
 
 
 def _patch_session(return_value=None, side_effect=None):
@@ -18,7 +18,7 @@ def _patch_session(return_value=None, side_effect=None):
         session_instance.prompt.return_value = return_value
     session_class = MagicMock(return_value=session_instance)
     return (
-        patch("llm_cli.ui.input_handler.PromptSession", session_class),
+        patch("oi.ui.input_handler.PromptSession", session_class),
         session_class,
         session_instance,
     )

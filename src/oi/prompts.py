@@ -4,13 +4,13 @@ from pathlib import Path
 
 from platformdirs import user_config_dir
 
-from llm_cli.exceptions import PromptNotFoundError
+from oi.exceptions import PromptNotFoundError
 
 
 def read_system_message_from_file(file_name: str) -> str:
     """Read system message from a prompt file, checking user config first then package."""
     # First try user config directory
-    config_dir = Path(user_config_dir("llm_cli", ensure_exists=True)) / "prompts"
+    config_dir = Path(user_config_dir("oi", ensure_exists=True)) / "prompts"
     config_dir.mkdir(exist_ok=True)
     user_prompt = config_dir / file_name
 
@@ -21,7 +21,7 @@ def read_system_message_from_file(file_name: str) -> str:
     # Fall back to package prompts
     try:
         with (
-            resources.files("llm_cli")
+            resources.files("oi")
             .joinpath("prompts")
             .joinpath(file_name)
             .open("r") as file
@@ -40,7 +40,7 @@ def get_prompts() -> list[str]:
     pattern = r"prompt_(.+)\.txt"
 
     # Check user config directory
-    config_dir = Path(user_config_dir("llm_cli", ensure_exists=True)) / "prompts"
+    config_dir = Path(user_config_dir("oi", ensure_exists=True)) / "prompts"
     config_dir.mkdir(exist_ok=True)
 
     # Add prompts from user config
@@ -50,7 +50,7 @@ def get_prompts() -> list[str]:
 
     # Add prompts from package
     try:
-        for file in resources.files("llm_cli").joinpath("prompts").iterdir():
+        for file in resources.files("oi").joinpath("prompts").iterdir():
             if match := re.match(pattern, file.name):
                 prompts.add(match.group(1))
     except (TypeError, ModuleNotFoundError):

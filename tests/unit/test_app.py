@@ -6,17 +6,17 @@ from unittest.mock import Mock
 import pytest
 from pydantic_ai.messages import ModelResponse, TextPart
 
-from llm_cli.app import (
+from oi.app import (
     ChatLoopContext,
     _handle_local_command,
     handle_chat_selection,
     run_chat_loop,
 )
-from llm_cli.config.settings import Config
-from llm_cli.core.session import Chat, ChatMetadata
-from llm_cli.exceptions import ChatNotFoundError
-from llm_cli.llm_types import ChatOptions, ModelCapabilities
-from llm_cli.ui.labels import WARNING_LABEL, ansi_message
+from oi.config.settings import Config
+from oi.core.session import Chat, ChatMetadata
+from oi.exceptions import ChatNotFoundError
+from oi.llm_types import ChatOptions, ModelCapabilities
+from oi.ui.labels import WARNING_LABEL, ansi_message
 
 
 def _make_ctx(**overrides: Any) -> ChatLoopContext:

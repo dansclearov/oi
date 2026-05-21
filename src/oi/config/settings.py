@@ -11,7 +11,7 @@ from platformdirs import user_config_dir, user_data_dir
 
 def get_user_config_path() -> Path:
     """Get the path to the user configuration file."""
-    config_dir = Path(user_config_dir("llm_cli", ensure_exists=True))
+    config_dir = Path(user_config_dir("oi", ensure_exists=True))
     return config_dir / "config.json"
 
 
@@ -52,8 +52,8 @@ def update_user_config(key: str, value: Any) -> None:
 class Config:
     chat_dir: str = field(
         default_factory=lambda: os.getenv(
-            "LLM_CLI_CHAT_DIR",
-            str(Path(user_data_dir("llm_cli", ensure_exists=True)) / "chats"),
+            "OI_CHAT_DIR",
+            str(Path(user_data_dir("oi", ensure_exists=True)) / "chats"),
         )
     )
     vim_mode: bool = field(

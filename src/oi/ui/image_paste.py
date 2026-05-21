@@ -21,7 +21,7 @@ from prompt_toolkit.layout.processors import (
 from prompt_toolkit.layout.utils import explode_text_fragments
 from pydantic_ai.messages import BinaryContent
 
-from llm_cli.ui.labels import PILL_PT_STYLE
+from oi.ui.labels import PILL_PT_STYLE
 
 SENTINEL_BASE = 0xE000
 SENTINEL_MAX = 0xF8FF

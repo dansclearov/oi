@@ -3,10 +3,10 @@ from unittest.mock import Mock
 
 from pydantic_ai.messages import ModelResponse, TextPart
 
-from llm_cli.constants import MAX_TITLE_LENGTH
-from llm_cli.core.message_utils import flatten_history
-from llm_cli.core.session import Chat, ChatMetadata
-from llm_cli.core.smart_title import SmartTitleGenerator
+from oi.constants import MAX_TITLE_LENGTH
+from oi.core.message_utils import flatten_history
+from oi.core.session import Chat, ChatMetadata
+from oi.core.smart_title import SmartTitleGenerator
 
 
 def _make_chat() -> Chat:

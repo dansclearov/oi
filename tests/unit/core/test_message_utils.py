@@ -1,4 +1,4 @@
-from llm_cli.core.message_utils import (
+from oi.core.message_utils import (
     build_prompt,
     flatten_history,
     latest_system_prompt,

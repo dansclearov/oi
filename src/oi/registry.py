@@ -1,9 +1,9 @@
 from typing import Any
 
-from llm_cli.config.loaders import load_merged_model_config, parse_models_and_aliases
-from llm_cli.exceptions import ModelNotFoundError
-from llm_cli.llm_types import ModelCapabilities
-from llm_cli.ui.labels import WARNING_LABEL, ansi_message
+from oi.config.loaders import load_merged_model_config, parse_models_and_aliases
+from oi.exceptions import ModelNotFoundError
+from oi.llm_types import ModelCapabilities
+from oi.ui.labels import WARNING_LABEL, ansi_message
 
 # Aliases to exclude from display models
 EXCLUDED_ALIASES = {"default"}

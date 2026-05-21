@@ -4,8 +4,8 @@ import io
 
 from rich.console import Console
 
-from llm_cli.llm_types import ChatOptions, ModelCapabilities
-from llm_cli.renderers import StyledRenderer
+from oi.llm_types import ChatOptions, ModelCapabilities
+from oi.renderers import StyledRenderer
 
 
 def _make_renderer() -> tuple[StyledRenderer, io.StringIO]:

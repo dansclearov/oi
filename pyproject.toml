@@ -1,7 +1,7 @@
 [project]
-name = "llm-cli"
+name = "oi-cli"
 version = "0.1.0"
-description = "Add your description here"
+description = "Command-line chat interface for multiple LLM providers, with streaming output, persistent chats, and YAML-based model aliases."
 readme = "README.md"
 authors = [
     { name = "Dan Sclearov", email = "dansclearov@gmail.com" }
@@ -17,16 +17,19 @@ dependencies = [
     "rich>=14.0.0",
     "send2trash>=1.8.3",
     "prompt-toolkit>=3.0.51",
-    "pydantic-ai>=1.63.0,<2.0",
+    "pydantic-ai>=1.100.0,<2.0",
 ]
 
 
 [project.scripts]
-llm-cli = "llm_cli.main:main"
+oi = "oi.main:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/oi"]
 
 [dependency-groups]
 dev = [

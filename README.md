@@ -1,4 +1,4 @@
-# llm-cli
+# oi
 
 Command-line chat interface for multiple LLM providers, with streaming output, persistent chats, and YAML-based model aliases.
 
@@ -6,27 +6,27 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
 
 ## Highlights
 
-- One CLI for multiple providers through `pydantic-ai` (`openai`, `openai-responses`, `anthropic`, `google-gla`, `openrouter`, `moonshotai`, and others you add in YAML).
+- One CLI for multiple providers through `pydantic-ai` (`openai`, `openai-responses`, `anthropic`, `google`, `openrouter`, `moonshotai`, and others you add in YAML).
 - Fast model switching via aliases like `sonnet`, `gpt`, `gemini-pro`.
 - Chat history with resume/continue flows and an interactive selector.
 - Chat bookmarks with `/bookmark` in-chat plus bookmark/filter controls in the selector.
 - Optional search and thinking traces when the selected model supports them.
 - Paste images with `Alt+V` on vision-capable models.
-- User config in `~/.config/llm_cli/` merges with built-in defaults.
+- User config in `~/.config/oi/` merges with built-in defaults.
 
 ## Install
 
 ```bash
-uv tool install git+https://github.com/dansclearov/llm-cli.git
+uv tool install git+https://github.com/dansclearov/oi.git
 ```
 
 For local development:
 
 ```bash
-git clone https://github.com/dansclearov/llm-cli.git
-cd llm-cli
+git clone https://github.com/dansclearov/oi.git
+cd oi
 uv install --group dev
-uv run llm-cli --help
+uv run oi --help
 ```
 
 ## Quick Start
@@ -43,26 +43,26 @@ export OPENROUTER_API_KEY=...
 Start chatting:
 
 ```bash
-llm-cli
-llm-cli -P concise -m sonnet
+oi
+oi -P concise -m sonnet
 ```
 
 ## Common Commands
 
 ```bash
 # Pick prompt + model
-llm-cli -P concise -m gpt
+oi -P concise -m gpt
 
 # Continue or resume chats
-llm-cli -c
-llm-cli -r
-llm-cli -r chat_20240622_143022_a1b2c3d4
+oi -c
+oi -r
+oi -r chat_20240622_143022_a1b2c3d4
 
 # Headless: send one message and exit
-llm-cli -p "what's 2+2"
-llm-cli -c -p "follow up on the last chat"
-llm-cli --ephemeral -p "quick question, don't save it"
-llm-cli -c --ephemeral -p "probe an existing chat without dirtying it"
+oi -p "what's 2+2"
+oi -c -p "follow up on the last chat"
+oi --ephemeral -p "quick question, don't save it"
+oi -c --ephemeral -p "probe an existing chat without dirtying it"
 
 # In-chat local commands
 /bookmark
@@ -71,18 +71,18 @@ llm-cli -c --ephemeral -p "probe an existing chat without dirtying it"
 # Slash commands complete with Tab
 
 # Model features
-llm-cli --search -m sonnet
-llm-cli --no-thinking -m gpt
-llm-cli --hide-thinking -m gpt
+oi --search -m sonnet
+oi --no-thinking -m gpt
+oi --hide-thinking -m gpt
 
 # Show config/data paths
-llm-cli --user-paths
+oi --user-paths
 ```
 
 ## Configuration
 
-Default models and aliases live in `src/llm_cli/models.yaml`.
-User overrides live in `~/.config/llm_cli/models.yaml` and are merged on top of defaults.
+Default models and aliases live in `src/oi/models.yaml`.
+User overrides live in `~/.config/oi/models.yaml` and are merged on top of defaults.
 
 Example user overrides:
 
@@ -101,18 +101,18 @@ Notes:
 
 - Top-level keys starting with `_` are ignored (useful for YAML anchors/metadata).
 - `extra_params` is passed through for provider-specific model settings.
-- On first run, `~/.config/llm_cli/models.yaml` is auto-created from a template.
+- On first run, `~/.config/oi/models.yaml` is auto-created from a template.
 
 ## Prompts
 
 Prompts are loaded from:
 
-1. `~/.config/llm_cli/prompts/` (user overrides)
-2. `src/llm_cli/prompts/` (built-ins)
+1. `~/.config/oi/prompts/` (user overrides)
+2. `src/oi/prompts/` (built-ins)
 
-Naming format is `prompt_<name>.txt`, used as `llm-cli -P <name>`.
+Naming format is `prompt_<name>.txt`, used as `oi -P <name>`.
 
-Set the default prompt for new chats in `~/.config/llm_cli/config.json`:
+Set the default prompt for new chats in `~/.config/oi/config.json`:
 
 ```json
 {
@@ -120,7 +120,7 @@ Set the default prompt for new chats in `~/.config/llm_cli/config.json`:
 }
 ```
 
-An explicit `-P` still wins, for example `llm-cli -P general`.
+An explicit `-P` still wins, for example `oi -P general`.
 
 ## Development
 

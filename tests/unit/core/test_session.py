@@ -6,12 +6,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from llm_cli.config.settings import Config
-from llm_cli.core.message_utils import flatten_history
-from llm_cli.core.chat_repository import ChatRepository
-from llm_cli.core.session import Chat, ChatMetadata
-from llm_cli.exceptions import ChatNotFoundError
-from llm_cli.llm_types import ModelCapabilities
+from oi.config.settings import Config
+from oi.core.message_utils import flatten_history
+from oi.core.chat_repository import ChatRepository
+from oi.core.session import Chat, ChatMetadata
+from oi.exceptions import ChatNotFoundError
+from oi.llm_types import ModelCapabilities
 
 
 class TestChatMetadata:

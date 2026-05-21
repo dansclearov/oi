@@ -2,10 +2,10 @@
 
 from typing import Any, Optional, Sequence
 
-from llm_cli.constants import MAX_TITLE_LENGTH
-from llm_cli.core.message_utils import build_prompt, flatten_history, response_text
-from llm_cli.core.session import Chat
-from llm_cli.llm_types import ChatOptions
+from oi.constants import MAX_TITLE_LENGTH
+from oi.core.message_utils import build_prompt, flatten_history, response_text
+from oi.core.session import Chat
+from oi.llm_types import ChatOptions
 
 TITLE_PROMPT_INSTRUCTIONS = (
     "Generate a concise 5-10 word title for this conversation. "

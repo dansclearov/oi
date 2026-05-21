@@ -5,15 +5,15 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
-from llm_cli.config.settings import Config
-from llm_cli.core.message_utils import (
+from oi.config.settings import Config
+from oi.core.message_utils import (
     convert_legacy_messages,
     count_non_system_messages,
     deserialize_model_messages,
     serialize_model_messages,
 )
-from llm_cli.core.session import Chat, ChatMetadata
-from llm_cli.exceptions import ChatNotFoundError
+from oi.core.session import Chat, ChatMetadata
+from oi.exceptions import ChatNotFoundError
 
 CHAT_LOAD_EXCEPTIONS = (
     ChatNotFoundError,
