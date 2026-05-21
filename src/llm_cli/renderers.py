@@ -124,6 +124,7 @@ class StyledRenderer(ResponseRenderer):
     def __init__(self, capabilities: ModelCapabilities, options: ChatOptions):
         super().__init__(capabilities, options)
         self.console = Console(highlight=False)
+        self._pending_thinking_ws = ""
 
     def start_response(self) -> None:
         if not self.options.silent and self.options.show_assistant_label:
@@ -133,19 +134,32 @@ class StyledRenderer(ResponseRenderer):
         self.console.print(escape(text), end="")
 
     def _render_thinking(self, text: str) -> None:
-        self.console.print(
-            f"[bright_black italic]{escape(text)}[/bright_black italic]",
-            end="",
-        )
+        # Hold back trailing whitespace so we control the gap between the
+        # thinking trace and what follows. Providers like Gemini append their
+        # own trailing newlines, which would otherwise stack with the separator
+        # printed in _end_thinking_section. Internal blank lines are preserved
+        # because the held-back whitespace is flushed as soon as more content
+        # arrives; only the final run before the boundary is dropped.
+        content = self._pending_thinking_ws + text
+        stripped = content.rstrip()
+        self._pending_thinking_ws = content[len(stripped) :]
+        if stripped:
+            self.console.print(
+                f"[bright_black italic]{escape(stripped)}[/bright_black italic]",
+                end="",
+            )
 
     def _render_tool(self, text: str) -> None:
         self.console.print(f"\n[magenta]tool:[/magenta] {escape(text)}\n", end="")
 
     def _begin_thinking_section(self) -> None:
         # Rich rendering already differentiates via style.
-        pass
+        self._pending_thinking_ws = ""
 
     def _end_thinking_section(self, *, final: bool) -> None:
+        # Drop the trailing whitespace held back from the thinking trace and
+        # emit a single blank line as the separator.
+        self._pending_thinking_ws = ""
         self.console.print("\n", end="")
 
     def _finish(self) -> None:
