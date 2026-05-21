@@ -5,7 +5,7 @@ aliases:
   opus: anthropic/claude-opus-4-7
   gpt: openai-responses/gpt-5.5
   gemini-pro: google-gla/gemini-3.1-pro-preview
-  gemini-flash: google-gla/gemini-3-flash-preview
+  gemini-flash: google-gla/gemini-3.5-flash
 
 anthropic:
   claude-sonnet-4-6:
@@ -48,7 +48,7 @@ google-gla:
     supports_thinking: true
     supports_search: true
     supports_vision: true
-  gemini-3-flash-preview:
+  gemini-3.5-flash:
     supports_thinking: true
     supports_search: true
     supports_vision: true
