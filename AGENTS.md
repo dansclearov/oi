@@ -68,6 +68,12 @@ matches the package dir, hatchling needs the explicit
 runs the test suite across 3.10–3.13 plus a lint job (`pre-commit run
 --all-files` + `ty check`) on every push/PR.
 
+**Action versions:** the `actions/*` steps use floating major tags (e.g.
+`actions/checkout@v6`). `astral-sh/setup-uv` is the exception — it's pinned to a
+full commit SHA (`@<sha> # v8.1.0`) because it doesn't publish a floating major
+tag past `v7` (so `@v8` 404s), and SHA pinning is setup-uv's own recommended
+approach. Bump the SHA + comment together when updating.
+
 **Publishing is automated** via `.github/workflows/release.yml`, triggered on
 `v*` tags. It (1) builds the sdist + wheel, (2) publishes to PyPI via **Trusted
 Publishing (OIDC)** — no API tokens; relies on a PyPI publisher + a GitHub `pypi`
