@@ -12,7 +12,7 @@ config/`models.yaml` format, alias names).
 ### Changed
 
 - Rebranded from `llm-cli` to `oi`: command, Python package, config/data
-  directories, and PyPI distribution name (`oi-cli`).
+  directories, and PyPI distribution name (`oi-chat`).
 - Upgraded `pydantic-ai` to 1.100 and migrated from `builtin_tools` to the
   `native_tools` API.
 - Use the non-deprecated `google` provider prefix (was `google-gla`).
