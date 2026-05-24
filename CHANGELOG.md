@@ -9,6 +9,12 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Fixed
+
+- Exiting a chat with Ctrl+C now re-saves it, bumping its `updated_at` so
+  `oi -c` reopens the chat you just closed — even if you only re-read it
+  without sending a new message. (Skipped in `--ephemeral`.)
+
 ## [0.1.0] - 2026-05-24
 
 Initial public release.

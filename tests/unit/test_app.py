@@ -264,7 +264,7 @@ def test_handle_local_command_rejects_unknown_slash_command(capsys):
     )
 
 
-def test_run_chat_loop_does_not_save_clean_chat_on_exit():
+def _existing_chat() -> Chat:
     metadata = ChatMetadata(
         id="test-chat-exit",
         title="Existing chat",
@@ -276,11 +276,32 @@ def test_run_chat_loop_does_not_save_clean_chat_on_exit():
     current_chat = Chat(metadata=metadata)
     current_chat.append_user_message("Earlier user message")
     current_chat.append_assistant_response("Earlier assistant message")
+    return current_chat
+
+
+def test_run_chat_loop_touches_chat_on_exit():
+    # Re-reading a chat and exiting with Ctrl+C should re-save it so its
+    # updated_at bumps and `oi -c` reopens the one you just closed.
+    current_chat = _existing_chat()
 
     chat_manager = Mock()
     input_handler = Mock()
     input_handler.get_user_input.side_effect = [KeyboardInterrupt()]
     ctx = _make_ctx(chat_manager=chat_manager, input_handler=input_handler)
+
+    run_chat_loop(current_chat, ctx)
+
+    chat_manager.save_chat.assert_called_once_with(current_chat)
+
+
+def test_run_chat_loop_does_not_touch_chat_on_exit_when_ephemeral():
+    current_chat = _existing_chat()
+
+    chat_manager = Mock()
+    input_handler = Mock()
+    input_handler.get_user_input.side_effect = [KeyboardInterrupt()]
+    ctx = _make_ctx(chat_manager=chat_manager, input_handler=input_handler)
+    ctx.ephemeral = True
 
     run_chat_loop(current_chat, ctx)
 

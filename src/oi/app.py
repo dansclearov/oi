@@ -373,6 +373,12 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
                 is_idle = True
                 print("", flush=True)
             else:
+                # Touch the chat on exit so `oi -c` reopens the one you just
+                # closed, even if you only re-read it without sending anything.
+                # save_chat() bumps updated_at (which drives -c ordering) and
+                # skips empty chats via should_be_saved().
+                if not ctx.ephemeral:
+                    ctx.chat_manager.save_chat(current_chat)
                 break
 
 
