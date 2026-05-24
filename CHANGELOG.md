@@ -9,6 +9,10 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-24
+
+Initial public release.
+
 ### Changed
 
 - Rebranded from `llm-cli` to `oi`: command, Python package, config/data
@@ -22,4 +26,5 @@ config/`models.yaml` format, alias names).
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/commits/main
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dansclearov/oi/releases/tag/v0.1.0
