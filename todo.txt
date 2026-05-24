@@ -4,21 +4,13 @@
 - file upload with <...> syntax, manual (autocomplete?) and on ctrl+v?
 - nvim plugin, the plugin functionality could allow navigating the tree history
 - login with anthropic plan (against tos?)
-- image pasting
 - document title model small cost
-- document the cli being tested only on linux
 - add schema validation for models.yaml (e.g. jsonschema) (esp for user config for clean errors)
-- add update readme to claude.md
 - resoning effort cli switch and new capability
-- add multi turn in demo
 - 20 entries in history and month, year/month subheaders
 - way to hide short chats in history
-- web search not saved in history, should we?
 - add search on the fly during an already live chat
-- "User: " prompt dissapears after paste
-- bookmark chats
 - ctrl+c adds 2 newlines
-- no default config instead a default user config (or something like that)
 
 Glossary:
 ? -> if possible
