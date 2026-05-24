@@ -1,7 +1,9 @@
 name: Release
 
-# Publishes to PyPI on a version tag (e.g. `git tag v0.1.0 && git push --tags`).
-# Uses PyPI Trusted Publishing (OIDC) — no API tokens stored in the repo.
+# On a version tag (e.g. `git tag v0.1.0 && git push --tags`):
+#   1. build the sdist + wheel
+#   2. publish to PyPI via Trusted Publishing (OIDC, no stored tokens)
+#   3. create a GitHub Release with notes from the matching CHANGELOG section
 on:
   push:
     tags: ["v*"]
@@ -33,3 +35,32 @@ jobs:
           path: dist/
       - uses: astral-sh/setup-uv@v5
       - run: uv publish --trusted-publishing always
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to create the GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Extract changelog notes for this tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" {f=1; next}
+            f && (/^## \[/ || /^\[/) {exit}
+            f
+          ' CHANGELOG.md | sed -e '/./,$!d' > release-notes.md
+          cat release-notes.md
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          --title "oi-chat ${GITHUB_REF_NAME#v}"
+          --notes-file release-notes.md
+          dist/*
