@@ -2,7 +2,7 @@
 
 Command-line chat interface for multiple LLM providers, with streaming output, persistent chats, and YAML-based model aliases.
 
-![Demo](demo.gif)
+![Demo](https://raw.githubusercontent.com/dansclearov/oi/main/demo.gif)
 
 ## Highlights
 
