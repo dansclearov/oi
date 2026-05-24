@@ -55,6 +55,38 @@ uv run oi                      # CLI interface with default settings
 uv run oi -P concise -m sonnet # Use specific prompt and model
 ```
 
+## Packaging & Releases
+
+**Names:** the PyPI distribution is **`oi-chat`**, but the command and import
+package are **`oi`** (`[project.scripts] oi = "oi.main:main"`). Both `oi` and
+`oi-cli` are unavailable on PyPI (`oi` is an abandoned package; `oi-cli` is
+rejected as too similar to the existing `oicli`). Because the dist name no longer
+matches the package dir, hatchling needs the explicit
+`[tool.hatch.build.targets.wheel] packages = ["src/oi"]` in `pyproject.toml`.
+
+**Python support:** `requires-python = ">=3.10"`. CI (`.github/workflows/ci.yml`)
+runs the test suite across 3.10–3.13 plus a lint job (`pre-commit run
+--all-files` + `ty check`) on every push/PR.
+
+**Publishing is automated** via `.github/workflows/release.yml`, triggered on
+`v*` tags. It (1) builds the sdist + wheel, (2) publishes to PyPI via **Trusted
+Publishing (OIDC)** — no API tokens; relies on a PyPI publisher + a GitHub `pypi`
+environment that are already configured, and (3) creates a GitHub Release whose
+notes are the matching `CHANGELOG.md` section, with the build artifacts attached.
+
+**To cut a release:**
+1. Bump `version` in `pyproject.toml`.
+2. In `CHANGELOG.md`, move the `[Unreleased]` entries under a new
+   `## [x.y.z] - <date>` heading (add a fresh empty `[Unreleased]`; update the
+   link refs at the bottom).
+3. Commit and push `main`.
+4. `git tag vX.Y.Z && git push origin vX.Y.Z` — the workflow does the rest.
+
+Keep notable changes under `CHANGELOG.md`'s `[Unreleased]` as you go: the release
+job extracts the per-version section, so it must exist before tagging. Pre-1.0,
+bump the **minor** for breaking changes (CLI flags, config/`models.yaml` format,
+alias names) and the **patch** for features and fixes.
+
 ## Architecture Overview (Post-Refactoring)
 
 **Directory Structure:**
@@ -196,6 +228,7 @@ Conversation and status labels are centralized in `ui/labels.py`:
 12. Local slash commands are completed from `local_commands.py`; if you add one, update the command registry there
 13. Slash command completion is readline-like `Tab` completion, not a dropdown selector UI
 14. Paste pills (both images and long text) use Unicode PUA sentinel chars in the input buffer; display-only pill expansion via a prompt_toolkit `Processor`. Text pastes expand inline on submit, images become `BinaryContent` parts. Long-text threshold is a fixed `PASTE_LINE_THRESHOLD` in `input_handler.py` (not a function of terminal size — the true failure mode is rendered-rows vs scrollback, which a source-line threshold can only approximate, so the constant is the honest choice). Don't bind `Ctrl+V` — terminals hijack it for paste
+15. Use the `google` provider prefix for Gemini models in `models.yaml` (the `google-gla`/`google-vertex` prefixes are deprecated in pydantic-ai and removed in v2)
 
 **Quick Tests:**
 ```bash
