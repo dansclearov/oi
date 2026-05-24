@@ -17,7 +17,9 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
 ## Install
 
 ```bash
-uv tool install git+https://github.com/dansclearov/oi.git
+uv tool install oi-chat   # recommended
+# or
+pipx install oi-chat
 ```
 
 For local development:
