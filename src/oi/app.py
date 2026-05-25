@@ -450,10 +450,31 @@ def _discard_pending_user_message(current_chat: Chat) -> None:
         current_chat.messages.pop()
 
 
+def run_stats(args) -> None:
+    """Collect and render usage statistics, then exit."""
+    # Heavy imports are local so the chat path doesn't pay for them.
+    from oi.core.stats import StatsCollector
+    from oi.ui.stats_view import render_stats
+
+    manager = ChatManager(Config())
+    if args.deep:
+        print(
+            ansi_message(
+                INFO_LABEL, "Scanning transcripts (this may take a moment)..."
+            ),
+            flush=True,
+        )
+    render_stats(StatsCollector(manager).collect(deep=args.deep))
+
+
 def main():
     """Main entry point for the LLM CLI application."""
     registry = ModelRegistry()
     args = parse_arguments(registry)
+
+    if getattr(args, "command", None) == "stats":
+        run_stats(args)
+        return
 
     # Handle --user-paths command
     if args.user_paths:

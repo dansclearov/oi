@@ -104,7 +104,8 @@ src/oi/
 │   ├── chat_manager.py # ChatManager - CRUD operations
 │   ├── chat_repository.py # ChatRepository - filesystem persistence
 │   ├── message_utils.py # Message serialization & history helpers
-│   └── smart_title.py # Smart title generation
+│   ├── smart_title.py # Smart title generation
+│   └── stats.py       # StatsCollector - aggregate stats over chat history
 ├── config/            # Configuration management
 │   ├── settings.py    # Config class + user config (JSON) management
 │   └── loaders.py     # YAML model configuration loading & merging
@@ -112,7 +113,8 @@ src/oi/
 │   ├── input_handler.py # InputHandler - prompt_toolkit integration
 │   ├── chat_selector.py # ChatSelector - interactive chat picker
 │   ├── image_paste.py # PasteStore (images + long text) + PillProcessor + clipboard image reader
-│   └── labels.py      # Shared ANSI/Rich/prompt-toolkit label styling
+│   ├── labels.py      # Shared ANSI/Rich/prompt-toolkit label styling
+│   └── stats_view.py  # Rich rendering for `oi stats` (heatmap, bars)
 ├── llm_types.py       # Shared chat/model capability dataclasses
 ├── app.py             # Main application orchestration + ChatLoopContext
 ├── cli.py             # Command-line argument parsing
@@ -161,6 +163,11 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - `run_headless_turn()` in `app.py` is the headless entry point; `main()` branches to it when `args.prompt is not None`
 - Output cleanups for pipe-friendliness: `AI:` label hidden via `ChatOptions.show_assistant_label=False`, `Loaded chat:` / "No previous chats" chatter suppressed via `handle_chat_selection(quiet=True)`. Thinking traces still render unless `--hide-thinking` is passed (compose them for clean stdout)
 - `-r` without an ID errors in headless — interactive selector is unavailable
+
+**Stats Subcommand (`oi stats`):**
+- `cli.py` adds an optional `add_subparsers(dest="command")`; `command` is `None` for the normal chat path. `main()` branches to `run_stats()` when it's `"stats"`.
+- `StatsCollector.collect()` (`core/stats.py`) does a cheap metadata-only pass; `--deep` also loads each transcript to count user/AI words (and the wordiest chat). Words come from text parts, so they exclude thinking traces and search results — token counts are intentionally not reported (input is cumulative, output is dominated by reasoning).
+- Keep `core/stats.py` Rich-free; rendering lives in `ui/stats_view.py`.
 
 **Streaming & Output:**
 - `StyledRenderer` is the only renderer — provides styled thinking traces (NOT markdown rendering!)

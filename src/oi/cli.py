@@ -87,4 +87,16 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         help="Print all user path locations and exit",
     )
 
+    # Optional verb subcommands. With no verb, `command` is None and the args
+    # above drive the normal chat path; chat flags must precede the verb token.
+    subparsers = parser.add_subparsers(dest="command")
+    stats_parser = subparsers.add_parser(
+        "stats", help="Show usage statistics across all chats"
+    )
+    stats_parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Scan full transcripts for token, word, and image stats (slower)",
+    )
+
     return parser.parse_args()

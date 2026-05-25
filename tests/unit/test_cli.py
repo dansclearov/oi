@@ -94,3 +94,32 @@ def test_parse_arguments_defaults_for_headless_flags(monkeypatch):
 
     assert args.prompt is None
     assert args.ephemeral is False
+    assert args.command is None
+
+
+def test_parse_arguments_stats_subcommand(monkeypatch):
+    registry = ModelRegistry()
+    monkeypatch.setattr(registry, "get_display_models", lambda: ["sonnet"])
+    monkeypatch.setattr(registry, "get_default_model", lambda: "sonnet")
+    monkeypatch.setattr("oi.cli.get_prompts", lambda: ["general", "concise"])
+    monkeypatch.setattr("oi.cli.load_user_config", lambda: {})
+    monkeypatch.setattr(sys, "argv", ["oi", "stats", "--deep"])
+
+    args = parse_arguments(registry)
+
+    assert args.command == "stats"
+    assert args.deep is True
+
+
+def test_parse_arguments_stats_without_deep(monkeypatch):
+    registry = ModelRegistry()
+    monkeypatch.setattr(registry, "get_display_models", lambda: ["sonnet"])
+    monkeypatch.setattr(registry, "get_default_model", lambda: "sonnet")
+    monkeypatch.setattr("oi.cli.get_prompts", lambda: ["general", "concise"])
+    monkeypatch.setattr("oi.cli.load_user_config", lambda: {})
+    monkeypatch.setattr(sys, "argv", ["oi", "stats"])
+
+    args = parse_arguments(registry)
+
+    assert args.command == "stats"
+    assert args.deep is False

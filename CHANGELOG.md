@@ -9,6 +9,13 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- `oi stats` — usage statistics across all chats: totals, per-model breakdown,
+  activity streaks, busiest hour/day, and a GitHub-style activity heatmap.
+  Add `--deep` to scan transcripts for word counts (yours vs the AI's), AI
+  reading time, your wordiest chat, images, and thinking usage.
+
 ### Fixed
 
 - Exiting a chat with Ctrl+C now re-saves it, bumping its `updated_at` so
