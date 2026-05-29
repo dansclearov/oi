@@ -16,6 +16,13 @@ config/`models.yaml` format, alias names).
   Add `--deep` to scan transcripts for word counts (yours vs the AI's), AI
   reading time, your wordiest chat, images, and thinking usage.
 
+### Changed
+
+- `opus` alias now points to `claude-opus-4-8` (was `claude-opus-4-7`).
+- Require `pydantic-ai>=1.104.0`, the first release that recognizes
+  `claude-opus-4-8`. Earlier versions gave it a fallback profile with no
+  adaptive thinking or effort support, so thinking traces came back empty.
+
 ### Fixed
 
 - Exiting a chat with Ctrl+C now re-saves it, bumping its `updated_at` so

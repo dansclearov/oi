@@ -2,7 +2,7 @@ aliases:
   default: sonnet
   sonnet: anthropic/claude-sonnet-4-6
   haiku: anthropic/claude-haiku-4-5
-  opus: anthropic/claude-opus-4-7
+  opus: anthropic/claude-opus-4-8
   gpt: openai-responses/gpt-5.5
   gemini-pro: google/gemini-3.1-pro-preview
   gemini-flash: google/gemini-3.5-flash
@@ -27,7 +27,7 @@ anthropic:
       anthropic_cache_instructions: '5m'
       anthropic_cache_messages: '5m'
       anthropic_cache_tool_definitions: '5m'
-  claude-opus-4-7:
+  claude-opus-4-8:
     supports_search: true
     supports_thinking: true
     supports_vision: true
