@@ -33,6 +33,10 @@ config/`models.yaml` format, alias names).
 
 ### Fixed
 
+- Resuming a chat (`oi -r`/`-c`) no longer prints a spurious "locked to its
+  original model" notice when you didn't pass `--model`. The notice now appears
+  only when you explicitly request a different model than the chat was created
+  with.
 - Exiting a chat with Ctrl+C now re-saves it, bumping its `updated_at` so
   `oi -c` reopens the chat you just closed — even if you only re-read it
   without sending a new message. (Skipped in `--ephemeral`.)

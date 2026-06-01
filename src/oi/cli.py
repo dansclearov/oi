@@ -34,8 +34,9 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         "-m",
         "--model",
         choices=available_models,
-        default=registry.get_default_model(),
-        help="Specify which model to use",
+        default=None,
+        help="Specify which model to use (defaults to the configured default for "
+        "new chats; ignored when resuming a chat)",
     )
     parser.add_argument(
         "-r",

@@ -410,7 +410,9 @@ def run_headless_turn(
         sys.exit(2)
 
     current_chat = handle_chat_selection(args, ctx.chat_manager, quiet=True)
-    requested_model = registry.resolve_model_name(args.model)
+    requested_model = registry.resolve_model_name(
+        args.model or registry.get_default_model()
+    )
 
     if current_chat is None:
         current_chat = ctx.chat_manager.create_new_chat(requested_model, ctx.prompt_str)
@@ -551,7 +553,9 @@ def main():
     # Handle chat selection/loading
     current_chat = handle_chat_selection(args, ctx.chat_manager)
     is_new_chat = False
-    requested_model = registry.resolve_model_name(args.model)
+    requested_model = registry.resolve_model_name(
+        args.model or registry.get_default_model()
+    )
 
     if current_chat is None:
         # Create new chat
@@ -566,7 +570,7 @@ def main():
             resolved_active_model = registry.resolve_model_name(ctx.active_model)
         except ModelNotFoundError:
             resolved_active_model = ctx.active_model
-        if requested_model != resolved_active_model:
+        if args.model is not None and requested_model != resolved_active_model:
             print(
                 ansi_message(
                     INFO_LABEL,
