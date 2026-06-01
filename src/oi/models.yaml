@@ -42,6 +42,7 @@ openai-responses:
     supports_thinking: true
     supports_search: true
     supports_vision: true
+    supports_subscription: true
 
 google:
   gemini-3.1-pro-preview:

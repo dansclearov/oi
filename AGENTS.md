@@ -100,6 +100,7 @@ alias names) and the **patch** for features and fixes.
 src/oi/
 ├── core/              # Core business logic
 │   ├── client.py      # LLMClient - API calls & retry logic
+│   ├── codex_auth.py  # ChatGPT subscription (Codex OAuth) login, token store, rate-limit telemetry
 │   ├── session.py     # Chat & ChatMetadata - data models + Chat.create_new()
 │   ├── chat_manager.py # ChatManager - CRUD operations
 │   ├── chat_repository.py # ChatRepository - filesystem persistence
@@ -169,6 +170,13 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - `StatsCollector.collect()` (`core/stats.py`) does a cheap metadata-only pass; `--deep` also loads each transcript to count user/AI words (and the wordiest chat). Words come from text parts, so they exclude thinking traces and search results — token counts are intentionally not reported (input is cumulative, output is dominated by reasoning).
 - Keep `core/stats.py` Rich-free; rendering lives in `ui/stats_view.py`.
 
+**ChatGPT Subscription Billing (OpenAI, `core/codex_auth.py`):**
+- `oi auth openai [login|logout|status]` (login is the default; bare `oi auth` prints status). `cli.py` nests provider→action subparsers; `app.py:run_auth()` dispatches. Login is a browser PKCE OAuth flow (reusing Codex's `client_id`) with a `localhost:1455` loopback; tokens are stored at `~/.config/oi/auth/openai.json` (mode `0600`) and auto-refreshed near expiry.
+- **Seamless routing**: when logged in, a model with `supports_subscription: true` (only on `openai-responses` gpt-5.x) bills to the ChatGPT subscription instead of the API key — no `models.yaml` change, no separate provider/alias. `client.py` builds an `OpenAIResponsesModel` **instance** pointed at the Codex backend (`CODEX_BASE_URL = https://chatgpt.com/backend-api/codex`) with a token-injecting httpx client, and passes that instance (not the `provider:model` string) to `model_request_stream`; everything else stays on the API key. Eligibility is the capability flag, gated by `_use_subscription()` / surfaced by `subscription_billing_active()`. `OI_NO_SUBSCRIPTION=1` forces the API key.
+- **Codex endpoint quirks** (all handled, no spoof string needed): requests must carry `Authorization: Bearer` + `ChatGPT-Account-Id` headers, set `openai_store=False`, and include a (possibly empty) `instructions` key — pydantic-ai omits empty instructions, so `_InstructionsTransport` re-adds `instructions: ""` to preserve an empty system prompt.
+- **Exhaustion → auto-fallback + auto-revert**: the Codex backend returns `x-codex-{primary,secondary}-used-percent` / `-reset-at` headers on every response (primary ~5h, secondary ~7d window; exhausted == used-percent 100). A `response` hook (`record_rate_limit_headers`) snapshots them; `is_exhausted()` is true while a window is maxed before its `reset_at`. While exhausted, routing uses the API key; if a turn hits the limit mid-request, `_stream_with_fallback` retries that turn on the API key in-place (gated on `is_exhausted()` set by the hook — never error-body guessing). After `reset_at` it auto-returns to the subscription; both transitions print a one-line notice.
+- **Billing indicator**: `app._billing_tag()` shows ` (sub)`/` (api)` on the chat-start banner — `(sub)` only when actually billing to the subscription, `(api)` otherwise (including non-subscription providers).
+
 **Streaming & Output:**
 - `StyledRenderer` is the only renderer — provides styled thinking traces (NOT markdown rendering!)
 - Shared label/color definitions live in `ui/labels.py` and are reused by plain prints, Rich output, and the prompt label
@@ -191,6 +199,7 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 
 **Key Components:**
 - `LLMClient` (core/client.py) - High-level API client with retry logic
+- `codex_auth` (core/codex_auth.py) - ChatGPT subscription login, token store/refresh, Codex routing client, rate-limit/exhaustion state
 - `ChatManager` (core/chat_manager.py) - Session persistence & management
 - `Chat`/`ChatMetadata` (core/session.py) - Data models
 - `ChatSelector` (ui/chat_selector.py) - Interactive chat selection
@@ -242,6 +251,7 @@ Conversation and status labels are centralized in `ui/labels.py`:
 13. Slash command completion is readline-like `Tab` completion, not a dropdown selector UI
 14. Paste pills (both images and long text) use Unicode PUA sentinel chars in the input buffer; display-only pill expansion via a prompt_toolkit `Processor`. Text pastes expand inline on submit, images become `BinaryContent` parts. Long-text threshold is a fixed `PASTE_LINE_THRESHOLD` in `input_handler.py` (not a function of terminal size — the true failure mode is rendered-rows vs scrollback, which a source-line threshold can only approximate, so the constant is the honest choice). Don't bind `Ctrl+V` — terminals hijack it for paste
 15. Use the `google` provider prefix for Gemini models in `models.yaml` (the `google-gla`/`google-vertex` prefixes are deprecated in pydantic-ai and removed in v2)
+16. ChatGPT subscription billing routes through a constructed `OpenAIResponsesModel` **instance** (custom Codex provider), the only path that passes a `Model` object instead of a `provider:model` string to `model_request_stream` — the retry helper tells them apart via `isinstance(model, str)`. Don't add an `openai-codex` provider to `models.yaml`; eligibility is the `supports_subscription` flag. Codex requires `openai_store=False` and a present `instructions` key (see the Subscription Billing section).
 
 **Quick Tests:**
 ```bash

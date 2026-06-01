@@ -1,9 +1,11 @@
 import pytest
 from unittest.mock import Mock
+from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelResponse, TextPart
 
-from oi.core.client import LLMClient
+from oi.core.client import LLMClient, subscription_billing_active
 from oi.llm_types import ChatOptions, ModelCapabilities
+from oi.registry import ModelRegistry
 
 
 class TestLLMClient:
@@ -224,3 +226,120 @@ class TestLLMClient:
             "type": "enabled",
             "budget_tokens": 2048,
         }
+
+
+class TestSubscriptionBillingActive:
+    @pytest.fixture
+    def registry(self):
+        return ModelRegistry()
+
+    def test_none_for_non_subscription_model(self, registry, monkeypatch):
+        monkeypatch.setattr("oi.core.client.codex_auth.is_logged_in", lambda: True)
+        assert (
+            subscription_billing_active(registry, "anthropic:claude-sonnet-4-6") is None
+        )
+
+    def test_true_when_logged_in(self, registry, monkeypatch):
+        monkeypatch.setattr("oi.core.client.codex_auth.is_logged_in", lambda: True)
+        monkeypatch.delenv("OI_NO_SUBSCRIPTION", raising=False)
+        assert subscription_billing_active(registry, "openai-responses:gpt-5.5") is True
+
+    def test_false_when_not_logged_in(self, registry, monkeypatch):
+        monkeypatch.setattr("oi.core.client.codex_auth.is_logged_in", lambda: False)
+        monkeypatch.delenv("OI_NO_SUBSCRIPTION", raising=False)
+        assert (
+            subscription_billing_active(registry, "openai-responses:gpt-5.5") is False
+        )
+
+    def test_false_when_disabled_via_env(self, registry, monkeypatch):
+        monkeypatch.setattr("oi.core.client.codex_auth.is_logged_in", lambda: True)
+        monkeypatch.setenv("OI_NO_SUBSCRIPTION", "1")
+        assert (
+            subscription_billing_active(registry, "openai-responses:gpt-5.5") is False
+        )
+
+
+class TestSubscriptionFallback:
+    def _client_with_calls(self, monkeypatch, first_raises):
+        client = LLMClient(Mock())
+        calls = []
+        api_response = ModelResponse(parts=[TextPart(content="api")])
+
+        def fake_retry(model, messages, settings, params, handler):
+            calls.append(model)
+            if len(calls) == 1 and first_raises is not None:
+                raise first_raises
+            return api_response
+
+        monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_retry)
+        return client, calls, api_response
+
+    def test_falls_back_to_api_on_exhaustion(self, monkeypatch):
+        monkeypatch.setattr("oi.core.client.codex_auth.is_exhausted", lambda: True)
+        monkeypatch.setattr("oi.core.client.codex_auth.exhausted_until", lambda: 0.0)
+        err = ModelHTTPError(
+            status_code=429, model_name="gpt-5.5", body={"detail": "x"}
+        )
+        client, calls, api_response = self._client_with_calls(monkeypatch, err)
+        handler = Mock()
+        handler.has_visible_output.return_value = False
+
+        result = client._stream_with_fallback(
+            Mock(),  # subscription model instance
+            None,
+            ("openai-responses:gpt-5.5", None),
+            [],
+            Mock(),
+            handler,
+            ChatOptions(silent=True),
+        )
+
+        assert result is api_response
+        assert calls[1] == "openai-responses:gpt-5.5"
+
+    def test_reraises_when_not_exhausted(self, monkeypatch):
+        monkeypatch.setattr("oi.core.client.codex_auth.is_exhausted", lambda: False)
+        err = ModelHTTPError(status_code=500, model_name="m", body=None)
+        client, calls, _ = self._client_with_calls(monkeypatch, err)
+        handler = Mock()
+        handler.has_visible_output.return_value = False
+
+        with pytest.raises(ModelHTTPError):
+            client._stream_with_fallback(
+                Mock(),
+                None,
+                ("api", None),
+                [],
+                Mock(),
+                handler,
+                ChatOptions(silent=True),
+            )
+        assert len(calls) == 1
+
+    def test_no_fallback_after_visible_output(self, monkeypatch):
+        monkeypatch.setattr("oi.core.client.codex_auth.is_exhausted", lambda: True)
+        err = ModelHTTPError(status_code=429, model_name="m", body={"quota": 1})
+        client, calls, _ = self._client_with_calls(monkeypatch, err)
+        handler = Mock()
+        handler.has_visible_output.return_value = True
+
+        with pytest.raises(ModelHTTPError):
+            client._stream_with_fallback(
+                Mock(),
+                None,
+                ("api", None),
+                [],
+                Mock(),
+                handler,
+                ChatOptions(silent=True),
+            )
+        assert len(calls) == 1
+
+    def test_exhausted_disables_billing_indicator(self, monkeypatch):
+        registry = ModelRegistry()
+        monkeypatch.setattr("oi.core.client.codex_auth.is_logged_in", lambda: True)
+        monkeypatch.delenv("OI_NO_SUBSCRIPTION", raising=False)
+        monkeypatch.setattr("oi.core.client.codex_auth.is_exhausted", lambda: True)
+        assert (
+            subscription_billing_active(registry, "openai-responses:gpt-5.5") is False
+        )

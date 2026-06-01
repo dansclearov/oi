@@ -99,4 +99,19 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         help="Scan full transcripts for token, word, and image stats (slower)",
     )
 
+    auth_parser = subparsers.add_parser(
+        "auth", help="Manage provider subscription logins"
+    )
+    auth_providers = auth_parser.add_subparsers(dest="auth_provider")
+    openai_auth = auth_providers.add_parser(
+        "openai", help="Use your ChatGPT subscription for OpenAI models"
+    )
+    openai_auth.add_argument(
+        "action",
+        nargs="?",
+        choices=["login", "logout", "status"],
+        default="login",
+        help="Auth action (defaults to login)",
+    )
+
     return parser.parse_args()

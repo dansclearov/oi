@@ -42,6 +42,10 @@ export GEMINI_API_KEY=...
 export OPENROUTER_API_KEY=...
 ```
 
+Alternatively, bill OpenAI models to a ChatGPT subscription instead of an API
+key with `oi auth openai login`; eligible models then route through the
+subscription automatically (set `OI_NO_SUBSCRIPTION=1` to force the API key).
+
 Start chatting:
 
 ```bash

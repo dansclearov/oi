@@ -21,10 +21,18 @@ from oi.ui.labels import WARNING_LABEL, ansi_message
 
 def _make_ctx(**overrides: Any) -> ChatLoopContext:
     """Build a ChatLoopContext with mock defaults, overridable per-field."""
+    llm_client = overrides.get("llm_client", Mock())
+    # The startup billing indicator resolves the active model through the
+    # registry; give the mock sane, non-subscription returns.
+    llm_client.registry.get_provider_for_model.return_value = (
+        "anthropic",
+        "claude-sonnet",
+    )
+    llm_client.registry.get_model_capabilities.return_value = ModelCapabilities()
     return ChatLoopContext(
         config=overrides.get("config", Config()),
         chat_manager=overrides.get("chat_manager", Mock()),
-        llm_client=overrides.get("llm_client", Mock()),
+        llm_client=llm_client,
         input_handler=overrides.get("input_handler", Mock()),
         chat_options=overrides.get("chat_options", ChatOptions()),
         prompt_str=overrides.get("prompt_str", "You are helpful."),

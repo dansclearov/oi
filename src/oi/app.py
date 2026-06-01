@@ -18,7 +18,7 @@ from oi.constants import (
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
 
 from oi.core.chat_manager import ChatManager
-from oi.core.client import LLMClient
+from oi.core.client import LLMClient, subscription_billing_active
 from oi.core.message_utils import (
     count_non_system_messages,
     flatten_history,
@@ -172,7 +172,18 @@ def handle_chat_selection(
     return current_chat
 
 
-def _print_chat_session_context(current_chat: Chat, prompt_str: str) -> None:
+def _billing_tag(registry: ModelRegistry, model_name: str) -> str:
+    """A minimal ` (sub)`/` (api)` billing suffix shown on every chat.
+
+    ` (sub)` only when a model bills to the subscription; ` (api)` otherwise,
+    including models with no subscription option.
+    """
+    return " (sub)" if subscription_billing_active(registry, model_name) else " (api)"
+
+
+def _print_chat_session_context(
+    current_chat: Chat, prompt_str: str, source_tag: str = ""
+) -> None:
     """Print startup context for new or resumed chats."""
     history = flatten_history(current_chat.messages)
     has_user_messages = any(role == "user" for role, _ in history)
@@ -181,7 +192,7 @@ def _print_chat_session_context(current_chat: Chat, prompt_str: str) -> None:
         print(
             ansi_message(
                 INFO_LABEL,
-                f"Starting new {current_chat.metadata.model} chat session. "
+                f"Starting new {current_chat.metadata.model}{source_tag} chat session. "
                 "Press Ctrl+C to exit. Use Shift+Enter for new lines.",
             )
         )
@@ -302,7 +313,8 @@ def _warn_if_response_hit_output_limit(model_response: ModelResponse) -> None:
 
 def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
     """Run the main chat interaction loop."""
-    _print_chat_session_context(current_chat, ctx.prompt_str)
+    source_tag = _billing_tag(ctx.llm_client.registry, ctx.active_model)
+    _print_chat_session_context(current_chat, ctx.prompt_str, source_tag)
     capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
     active_capabilities = ctx.llm_client.resolve_capabilities(
         ctx.active_model, capabilities_override
@@ -467,6 +479,47 @@ def run_stats(args) -> None:
     render_stats(StatsCollector(manager).collect(deep=args.deep))
 
 
+def _print_openai_auth_status() -> None:
+    """Print whether an OpenAI subscription login is active."""
+    from oi.core import codex_auth
+
+    creds = codex_auth.load_credentials()
+    if creds is None:
+        print(ansi_message(INFO_LABEL, "OpenAI: not logged in (using API key)."))
+        return
+    who = creds.email or creds.account_id or "unknown account"
+    print(ansi_message(INFO_LABEL, f"OpenAI: logged in as {who}."))
+
+
+def run_auth(args) -> None:
+    """Handle `oi auth ...` provider login/logout/status, then exit."""
+    from oi.core import codex_auth
+    from oi.exceptions import CodexAuthError
+
+    provider = getattr(args, "auth_provider", None)
+    if provider is None:
+        _print_openai_auth_status()
+        return
+
+    if provider == "openai":
+        action = getattr(args, "action", "login")
+        if action == "status":
+            _print_openai_auth_status()
+            return
+        if action == "logout":
+            removed = codex_auth.logout()
+            msg = "Logged out of OpenAI subscription." if removed else "Not logged in."
+            print(ansi_message(INFO_LABEL, msg))
+            return
+        try:
+            creds = codex_auth.login()
+        except CodexAuthError as e:
+            print(ansi_message(ERROR_LABEL, str(e)))
+            sys.exit(1)
+        who = creds.email or creds.account_id or "your subscription"
+        print(ansi_message(INFO_LABEL, f"Logged in as {who}."))
+
+
 def main():
     """Main entry point for the LLM CLI application."""
     registry = ModelRegistry()
@@ -474,6 +527,10 @@ def main():
 
     if getattr(args, "command", None) == "stats":
         run_stats(args)
+        return
+
+    if getattr(args, "command", None) == "auth":
+        run_auth(args)
         return
 
     # Handle --user-paths command
@@ -524,7 +581,8 @@ def main():
             ansi_message(
                 INFO_LABEL,
                 f"Continuing chat: {current_chat.metadata.title} "
-                f"({current_chat.metadata.model}, {current_chat.metadata.message_count} messages)",
+                f"({current_chat.metadata.model}{_billing_tag(registry, ctx.active_model)}"
+                f", {current_chat.metadata.message_count} messages)",
             )
         )
         print(

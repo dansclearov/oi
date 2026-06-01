@@ -11,6 +11,14 @@ config/`models.yaml` format, alias names).
 
 ### Added
 
+- ChatGPT subscription billing for OpenAI models. `oi auth openai login` signs
+  in with a ChatGPT Pro/Plus/Team plan; once logged in, Codex-eligible OpenAI
+  models route through the subscription automatically (no API key needed and no
+  config change), falling back to your API key for everything else. When the
+  subscription's usage limit is reached, oi transparently switches that chat to
+  your API key and returns to the subscription once it resets. Set
+  `OI_NO_SUBSCRIPTION=1` to always use the API key. Manage sign-in with
+  `oi auth openai [login|logout|status]`.
 - `oi stats` — usage statistics across all chats: totals, per-model breakdown,
   activity streaks, busiest hour/day, and a GitHub-style activity heatmap.
   Add `--deep` to scan transcripts for word counts (yours vs the AI's), AI

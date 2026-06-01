@@ -1,22 +1,65 @@
 import asyncio
+import os
 import signal
 import time
 from dataclasses import replace
 from typing import Optional, Sequence
 
 from pydantic_ai.direct import model_request_stream
+from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.native_tools import WebSearchTool
 from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 
+from oi.core import codex_auth
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.registry import ModelRegistry
 from oi.response_handler import ResponseHandler
+from oi.ui.labels import INFO_LABEL, ansi_message
 
 MAX_CHAT_ATTEMPTS = 3
 RETRY_WAIT_MIN_SECONDS = 4
 RETRY_WAIT_MAX_SECONDS = 10
+
+
+def _subscription_disabled() -> bool:
+    """True when the user has opted out of subscription billing via env."""
+    return os.environ.get("OI_NO_SUBSCRIPTION", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _supports_subscription(provider_name: str, capabilities: ModelCapabilities) -> bool:
+    return provider_name == "openai-responses" and capabilities.supports_subscription
+
+
+def _use_subscription(provider_name: str, capabilities: ModelCapabilities) -> bool:
+    return (
+        _supports_subscription(provider_name, capabilities)
+        and codex_auth.is_logged_in()
+        and not _subscription_disabled()
+    )
+
+
+def subscription_billing_active(
+    registry: ModelRegistry, model_name_or_alias: str
+) -> Optional[bool]:
+    """Whether a model bills to the subscription.
+
+    None for models with no subscription option (callers omit any indicator),
+    True when subscription billing is active, False when a subscription-capable
+    model falls back to the API key.
+    """
+    provider_name, _ = registry.get_provider_for_model(model_name_or_alias)
+    capabilities = registry.get_model_capabilities(model_name_or_alias)
+    if not _supports_subscription(provider_name, capabilities):
+        return None
+    return (
+        _use_subscription(provider_name, capabilities) and not codex_auth.is_exhausted()
+    )
 
 
 class LLMClient:
@@ -53,11 +96,27 @@ class LLMClient:
 
         model_name = f"{provider_name}:{resolved_model_id}"
 
+        use_subscription = (
+            _use_subscription(provider_name, capabilities)
+            and not codex_auth.is_exhausted()
+        )
+
+        if (
+            use_subscription
+            and codex_auth.consume_recovery()
+            and not effective_options.silent
+        ):
+            print(ansi_message(INFO_LABEL, "Back on the ChatGPT subscription."))
+
         # Start with extra_params from model config, then override with request-specific settings
         model_settings = dict(capabilities.extra_params)
         if capabilities.max_tokens is not None:
             model_settings.setdefault("max_tokens", capabilities.max_tokens)
         model_settings.update(effective_options.extra_settings)
+
+        if use_subscription:
+            # The Codex backend rejects stored responses.
+            model_settings["openai_store"] = False
 
         if effective_options.enable_thinking:
             if provider_name in {"openai", "openai-responses"}:
@@ -86,6 +145,24 @@ class LLMClient:
             effective_options,
         )
 
+        model_target: Model | str = (
+            self._build_subscription_model(resolved_model_id)
+            if use_subscription
+            else model_name
+        )
+
+        # When billing to the subscription, prepare an API-key fallback for the
+        # current turn in case the subscription is found exhausted mid-request.
+        api_fallback: Optional[tuple[str, Optional[ModelSettings]]] = None
+        if use_subscription:
+            api_settings = {
+                k: v for k, v in model_settings.items() if k != "openai_store"
+            }
+            api_fallback = (
+                model_name,
+                ModelSettings(api_settings) if api_settings else None,
+            )
+
         handler = ResponseHandler(capabilities, effective_options)
         self.interrupt_handler = handler
 
@@ -102,14 +179,14 @@ class LLMClient:
         try:
             handler.start_response()
             try:
-                response: Optional[ModelResponse] = (
-                    self._stream_model_response_with_retry(
-                        model_name,
-                        model_messages,
-                        model_settings_param,
-                        request_parameters,
-                        handler,
-                    )
+                response: Optional[ModelResponse] = self._stream_with_fallback(
+                    model_target,
+                    model_settings_param,
+                    api_fallback,
+                    model_messages,
+                    request_parameters,
+                    handler,
+                    effective_options,
                 )
             except KeyboardInterrupt:
                 handler.finish_response()
@@ -152,9 +229,69 @@ class LLMClient:
 
         return effective_options
 
+    def _build_subscription_model(self, provider_model_id: str) -> Model:
+        """Build a Responses model that bills to the ChatGPT subscription."""
+        from pydantic_ai.models.openai import OpenAIResponsesModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        access_token, account_id = codex_auth.get_access_token()
+        http_client = codex_auth.build_async_client(access_token, account_id)
+        provider = OpenAIProvider(
+            base_url=codex_auth.CODEX_BASE_URL,
+            api_key="unused",
+            http_client=http_client,
+        )
+        return OpenAIResponsesModel(provider_model_id, provider=provider)
+
+    def _stream_with_fallback(
+        self,
+        primary_model: Model | str,
+        primary_settings: Optional[ModelSettings],
+        api_fallback: Optional[tuple[str, Optional[ModelSettings]]],
+        model_messages: list[ModelMessage],
+        request_parameters: ModelRequestParameters,
+        handler: ResponseHandler,
+        options: ChatOptions,
+    ) -> ModelResponse:
+        """Stream on the subscription, falling back to the API key on exhaustion."""
+        try:
+            return self._stream_model_response_with_retry(
+                primary_model,
+                model_messages,
+                primary_settings,
+                request_parameters,
+                handler,
+            )
+        except ModelHTTPError:
+            if (
+                api_fallback is None
+                or handler.has_visible_output()
+                or not codex_auth.is_exhausted()
+            ):
+                raise
+            if not options.silent:
+                until = time.strftime(
+                    "%H:%M", time.localtime(codex_auth.exhausted_until())
+                )
+                print(
+                    ansi_message(
+                        INFO_LABEL,
+                        "ChatGPT subscription limit reached — "
+                        f"using your API key until {until}.",
+                    )
+                )
+            api_model, api_settings = api_fallback
+            return self._stream_model_response_with_retry(
+                api_model,
+                model_messages,
+                api_settings,
+                request_parameters,
+                handler,
+            )
+
     def _stream_model_response_with_retry(
         self,
-        model_name: str,
+        model: Model | str,
         model_messages: list[ModelMessage],
         model_settings: Optional[ModelSettings],
         request_parameters: ModelRequestParameters,
@@ -165,7 +302,7 @@ class LLMClient:
             try:
                 return asyncio.run(
                     self._stream_model_response(
-                        model_name,
+                        model,
                         model_messages,
                         model_settings,
                         request_parameters,
@@ -173,6 +310,11 @@ class LLMClient:
                     )
                 )
             except Exception:
+                # A subscription model (passed as an instance, not a string) that
+                # just hit its limit shouldn't burn the retry budget — let the
+                # caller fall back to the API key instead.
+                if codex_auth.is_exhausted() and not isinstance(model, str):
+                    raise
                 if attempt >= MAX_CHAT_ATTEMPTS or handler.has_visible_output():
                     raise
                 time.sleep(self._retry_wait_seconds(attempt))
@@ -186,7 +328,7 @@ class LLMClient:
 
     async def _stream_model_response(
         self,
-        model_name: str,
+        model: Model | str,
         model_messages: list[ModelMessage],
         model_settings: Optional[ModelSettings],
         request_parameters: ModelRequestParameters,
@@ -194,7 +336,7 @@ class LLMClient:
     ) -> ModelResponse:
         """Stream model events via the async API and return the final response."""
         async with model_request_stream(
-            model=model_name,
+            model=model,
             messages=model_messages,
             model_settings=model_settings,
             model_request_parameters=request_parameters,

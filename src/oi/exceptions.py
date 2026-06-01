@@ -29,3 +29,9 @@ class ConfigurationError(LLMCLIException):
     """Raised when there's a configuration error."""
 
     pass
+
+
+class CodexAuthError(LLMCLIException):
+    """Raised when ChatGPT subscription auth is missing or cannot be refreshed."""
+
+    pass
