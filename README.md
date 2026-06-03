@@ -8,7 +8,7 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
 
 - One CLI for multiple providers through `pydantic-ai` (`openai`, `openai-responses`, `anthropic`, `google`, `openrouter`, `moonshotai`, and others you add in YAML).
 - Fast model switching via aliases like `sonnet`, `gpt`, `gemini-pro`.
-- Chat history with resume/continue flows and an interactive selector that can search, preview, and open chats in your editor.
+- Chat history with resume/continue flows and an interactive selector that can search, preview, and open chats in your editor (`$EDITOR`).
 - Chat bookmarks with `/bookmark` in-chat plus bookmark/filter controls in the selector.
 - Optional search and thinking traces when the selected model supports them.
 - Paste images with `Alt+V` on vision-capable models.
