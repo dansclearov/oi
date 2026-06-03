@@ -14,6 +14,8 @@ from oi.config.settings import Config, update_user_config
 from oi.constants import (
     MAX_TITLE_LENGTH,
     MIN_MESSAGES_FOR_SMART_TITLE,
+    SMART_TITLE_API_KEY_ENV,
+    SMART_TITLE_MODEL,
 )
 from pydantic_ai.messages import (
     ModelMessage,
@@ -340,16 +342,23 @@ def _maybe_generate_smart_title(
     current_chat: Chat,
     chat_manager: ChatManager,
     llm_client: LLMClient,
-    active_model: str,
 ) -> None:
-    """Generate a smart title once enough conversation exists."""
+    """Generate a smart title once enough conversation exists.
+
+    Titles use a fixed cheap model (`SMART_TITLE_MODEL`) instead of the chat's
+    active model. When that model's API key isn't configured we skip generation
+    and keep the first-message title rather than billing the active model.
+    """
     non_system_count = count_non_system_messages(current_chat.messages)
     should_generate_title = (
         non_system_count >= MIN_MESSAGES_FOR_SMART_TITLE
         and not current_chat.metadata.smart_title_generated
     )
-    if should_generate_title:
-        chat_manager.generate_smart_title(current_chat, llm_client, active_model)
+    if not should_generate_title:
+        return
+    if not os.environ.get(SMART_TITLE_API_KEY_ENV):
+        return
+    chat_manager.generate_smart_title(current_chat, llm_client, SMART_TITLE_MODEL)
 
 
 def _warn_if_response_hit_output_limit(model_response: ModelResponse) -> None:
@@ -426,7 +435,7 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
                 _update_title_from_first_user_message(current_chat)
                 ctx.chat_manager.save_chat(current_chat)
                 _maybe_generate_smart_title(
-                    current_chat, ctx.chat_manager, ctx.llm_client, ctx.active_model
+                    current_chat, ctx.chat_manager, ctx.llm_client
                 )
 
             is_idle = True
@@ -503,9 +512,7 @@ def run_headless_turn(
 
     _update_title_from_first_user_message(current_chat)
     ctx.chat_manager.save_chat(current_chat)
-    _maybe_generate_smart_title(
-        current_chat, ctx.chat_manager, ctx.llm_client, ctx.active_model
-    )
+    _maybe_generate_smart_title(current_chat, ctx.chat_manager, ctx.llm_client)
 
 
 def _discard_pending_user_message(current_chat: Chat) -> None:

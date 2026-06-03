@@ -4,6 +4,12 @@
 MIN_MESSAGES_FOR_SMART_TITLE = 8
 MAX_TITLE_LENGTH = 75
 
+# Smart titles are generated with one cheap, consistent model rather than the
+# chat's active model. Skipped entirely when this model's key isn't configured.
+# Keep the model and the env var it needs together so they can't drift apart.
+SMART_TITLE_MODEL = "haiku"
+SMART_TITLE_API_KEY_ENV = "ANTHROPIC_API_KEY"
+
 # UI Navigation
 DEFAULT_PAGE_SIZE = 10
 INITIAL_PAGE = 0

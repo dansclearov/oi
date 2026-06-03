@@ -132,6 +132,11 @@ class LLMClient:
                     "google_thinking_config",
                     {"include_thoughts": True},
                 )
+        elif provider_name == "anthropic":
+            # A model can pin a thinking budget in its extra_params (e.g. Haiku,
+            # which has no adaptive mode), and extra_params are merged
+            # unconditionally — so disable explicitly to honor enable_thinking.
+            model_settings["anthropic_thinking"] = {"type": "disabled"}
 
         if effective_options.enable_search:
             self._apply_search_settings(

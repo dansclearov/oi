@@ -16,6 +16,20 @@ config/`models.yaml` format, alias names).
   the answer is appended to the chat or saved. Search and thinking follow the
   session's settings; the reply renders under an `AI (btw):` label.
 
+### Changed
+
+- Smart titles are now generated with a fixed cheap model (`haiku`) instead of
+  the chat's active model, so naming a chat never costs an expensive turn. When
+  `ANTHROPIC_API_KEY` isn't configured, smart titling is skipped and the chat
+  keeps its first-message title.
+
+### Fixed
+
+- Anthropic models with a pinned thinking budget (Haiku) no longer think when
+  thinking is disabled. Their `extra_params` budget was being merged
+  unconditionally, so `--no-thinking` turns and the smart-title call still paid
+  for reasoning tokens; thinking is now explicitly disabled when off.
+
 ## [0.1.1] - 2026-06-03
 
 ### Added

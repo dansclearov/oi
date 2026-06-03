@@ -42,6 +42,10 @@ export GEMINI_API_KEY=...
 export OPENROUTER_API_KEY=...
 ```
 
+If `ANTHROPIC_API_KEY` is set, longer chats get an auto-generated title via a
+tiny Haiku call (a fraction of a cent); without it, chats just keep their
+first-message title.
+
 Alternatively, bill OpenAI models to a ChatGPT subscription instead of an API
 key with `oi auth openai login`; eligible models then route through the
 subscription automatically (set `OI_NO_SUBSCRIPTION=1` to force the API key).

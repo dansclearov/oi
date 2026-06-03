@@ -159,6 +159,15 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - Smart title generation (triggers after 8+ messages)
 - Auto-save functionality
 
+**Smart Titles (`core/smart_title.py`, gated in `app.py:_maybe_generate_smart_title`):**
+- Titles are generated with one fixed cheap model — `SMART_TITLE_MODEL` (`haiku`)
+  — **not** the chat's active model, so a title never costs an Opus/GPT-5 turn.
+- The model and the env var it needs are coupled in `constants.py`
+  (`SMART_TITLE_MODEL` + `SMART_TITLE_API_KEY_ENV = "ANTHROPIC_API_KEY"`). When
+  that key isn't set, smart titling is skipped entirely and the chat keeps its
+  first-message title (`_update_title_from_first_user_message`). The skip leaves
+  `smart_title_generated` unset, so a title is generated later if the key appears.
+
 **Chat Selector Search / Preview / Editor (`ui/chat_selector.py`):**
 - Hand-rolled raw-key loop driving a Rich `Live` (NOT prompt_toolkit), so live
   text entry (search), modes, and scroll are all handled manually.
@@ -278,6 +287,7 @@ Conversation and status labels are centralized in `ui/labels.py`:
    - OpenAI reasoning models also set `openai_reasoning_effort="medium"` by default to satisfy the API requirement.
    - Anthropic models default to `anthropic_thinking={"type": "adaptive"}` when thinking is enabled (via `setdefault` in client.py). Adaptive thinking means the model decides how much to think.
    - **Claude Haiku 4.5** overrides this via `extra_params: {anthropic_thinking: {type: enabled, budget_tokens: 2048}}` in `models.yaml` because it still requires the explicit budget.
+   - Because `extra_params` are merged unconditionally, a pinned budget like Haiku's would otherwise force thinking on even when `enable_thinking` is False. `client.py` therefore sets `anthropic_thinking={"type": "disabled"}` for Anthropic when thinking is off, so `--no-thinking` (and the smart-title call) are honored regardless of the model's pinned budget.
    - Google Gemini models default to `google_thinking_config={"include_thoughts": True}` when thinking is enabled so their thoughts stream into the UI.
 6. Reasoning-focused OpenAI models (gpt-5, o-series) should be defined under the `openai-responses` provider section so the Responses API (with thinking traces) is used.
 7. `--search` wires up Pydantic AI's `WebSearchTool` only for providers that support it (OpenAI Responses, Anthropic, Gemini, xAI). OpenRouter models automatically switch to their `:online` variant and add the `web` plugin so search works there too; other providers simply ignore the flag.
