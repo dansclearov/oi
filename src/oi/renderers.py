@@ -128,7 +128,8 @@ class StyledRenderer(ResponseRenderer):
 
     def start_response(self) -> None:
         if not self.options.silent and self.options.show_assistant_label:
-            self.console.print(rich_label(AI_LABEL), end="")
+            label = rich_label(AI_LABEL, text=self.options.assistant_label_text)
+            self.console.print(label, end="")
 
     def _render_text(self, text: str) -> None:
         self.console.print(escape(text), end="")

@@ -24,6 +24,7 @@ class ChatOptions:
     enable_thinking: bool = True
     show_thinking: bool = True
     show_assistant_label: bool = True
+    assistant_label_text: str | None = None  # Override the "AI: " label text
     silent: bool = False  # Suppress all console output
 
     extra_settings: dict[str, Any] = field(default_factory=dict)

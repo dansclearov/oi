@@ -16,7 +16,7 @@ from oi.config.settings import Config
 from oi.core.session import Chat, ChatMetadata
 from oi.exceptions import ChatNotFoundError
 from oi.llm_types import ChatOptions, ModelCapabilities
-from oi.ui.labels import WARNING_LABEL, ansi_message
+from oi.ui.labels import BTW_AI_LABEL_TEXT, WARNING_LABEL, ansi_message
 
 
 def _make_ctx(**overrides: Any) -> ChatLoopContext:
@@ -203,9 +203,8 @@ def test_handle_local_command_toggles_bookmark_for_saved_chat():
 
     handled = _handle_local_command(
         "/bookmark",
-        Config(),
+        _make_ctx(chat_manager=chat_manager),
         current_chat,
-        chat_manager,
     )
 
     assert handled is True
@@ -226,9 +225,8 @@ def test_handle_local_command_rejects_bookmark_for_unsaved_chat(capsys):
 
     handled = _handle_local_command(
         "/bookmark",
-        Config(),
+        _make_ctx(chat_manager=chat_manager),
         current_chat,
-        chat_manager,
     )
 
     assert handled is True
@@ -256,9 +254,8 @@ def test_handle_local_command_rejects_unknown_slash_command(capsys):
 
     handled = _handle_local_command(
         "/bookamrk",
-        Config(),
+        _make_ctx(chat_manager=chat_manager),
         current_chat,
-        chat_manager,
     )
 
     assert handled is True
@@ -270,6 +267,60 @@ def test_handle_local_command_rejects_unknown_slash_command(capsys):
         )
         in capsys.readouterr().out
     )
+
+
+def test_btw_runs_side_question_without_mutating_history():
+    metadata = ChatMetadata(
+        id="test-chat-btw",
+        title="Existing chat",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        model="sonnet",
+        message_count=2,
+    )
+    current_chat = Chat(metadata=metadata)
+    current_chat.append_user_message("Hello")
+    current_chat.append_assistant_response("Hi there!")
+    history_before = list(current_chat.messages)
+
+    llm_client = Mock()
+    ctx = _make_ctx(llm_client=llm_client)
+
+    handled = _handle_local_command("/btw what did I ask?", ctx, current_chat)
+
+    assert handled is True
+    # The chat is never mutated: question and answer are not persisted.
+    assert current_chat.messages == history_before
+
+    # chat() saw the full history plus the side question as a trailing turn.
+    llm_client.chat.assert_called_once()
+    side_messages = llm_client.chat.call_args.args[0]
+    assert side_messages[: len(history_before)] == history_before
+    assert len(side_messages) == len(history_before) + 1
+
+    # The answer renders under the ephemeral "AI (btw): " label.
+    options = llm_client.chat.call_args.args[2]
+    assert options.assistant_label_text == BTW_AI_LABEL_TEXT
+
+
+def test_btw_without_question_prints_usage_and_skips_request():
+    metadata = ChatMetadata(
+        id="test-chat-btw-empty",
+        title="Existing chat",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        model="sonnet",
+        message_count=0,
+    )
+    current_chat = Chat(metadata=metadata)
+    llm_client = Mock()
+
+    handled = _handle_local_command(
+        "/btw", _make_ctx(llm_client=llm_client), current_chat
+    )
+
+    assert handled is True
+    llm_client.chat.assert_not_called()
 
 
 def _existing_chat() -> Chat:

@@ -37,6 +37,8 @@ USER_LABEL = LabelStyle(
     "ansigreen",
 )
 AI_LABEL = LabelStyle("AI: ", fg("blue") + attr("bold"), "blue bold", "ansiblue")
+# Label for an ephemeral `/btw` side answer: same AI styling, "btw" qualifier.
+BTW_AI_LABEL_TEXT = "AI (btw): "
 SYSTEM_LABEL = LabelStyle(
     "System: ",
     fg("violet") + attr("bold"),

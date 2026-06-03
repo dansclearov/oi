@@ -224,6 +224,16 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - `InputHandler` wires slash command completion through prompt-toolkit
 - Slash command completion uses `CompleteStyle.READLINE_LIKE`, so completion is `Tab`-triggered and rendered in a readline-like way instead of a dropdown menu
 - Unknown slash commands are still rejected in `app.py` after submit so they never get sent to the model
+- **`/btw <question>`** is the one command that takes an argument and runs a full
+  model turn. `_run_side_question` (`app.py`) streams a normal reply against a
+  *copy* of `current_chat.messages` (plus the question, and the pending system
+  prompt if the chat is brand-new) — nothing is appended or saved, so the side
+  exchange leaves no trace in history. It reuses the session's `ChatOptions`
+  (search/thinking inherited) with `assistant_label_text=BTW_AI_LABEL_TEXT` so
+  the answer renders under an `AI (btw):` label. It must swallow `KeyboardInterrupt`
+  locally — otherwise Ctrl+C mid-answer reaches the loop's idle-exit handler and
+  quits oi. The label override rides through `ChatOptions.assistant_label_text` →
+  `rich_label(AI_LABEL, text=...)` in `renderers.py`.
 
 **Key Components:**
 - `LLMClient` (core/client.py) - High-level API client with retry logic

@@ -71,6 +71,7 @@ oi --ephemeral -p "quick question, don't save it"
 oi -c --ephemeral -p "probe an existing chat without dirtying it"
 
 # In-chat local commands
+/btw <question>   # one-off question with full context, not saved to the chat
 /bookmark
 /vim
 

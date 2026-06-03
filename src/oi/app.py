@@ -2,7 +2,7 @@
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -15,7 +15,13 @@ from oi.constants import (
     MAX_TITLE_LENGTH,
     MIN_MESSAGES_FOR_SMART_TITLE,
 )
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    SystemPromptPart,
+    UserPromptPart,
+)
 
 from oi.core.chat_manager import ChatManager
 from oi.core.client import LLMClient, subscription_billing_active
@@ -42,6 +48,7 @@ from oi.registry import ModelRegistry
 from oi.ui.input_handler import InputHandler
 from oi.ui.labels import (
     AI_LABEL,
+    BTW_AI_LABEL_TEXT,
     ERROR_LABEL,
     INFO_LABEL,
     SYSTEM_LABEL,
@@ -209,9 +216,8 @@ def _print_chat_session_context(
 
 def _handle_local_command(
     normalized_input: str,
-    config: Config,
+    ctx: "ChatLoopContext",
     current_chat: Chat,
-    chat_manager: ChatManager,
 ) -> bool:
     """Handle local slash commands. Returns True when handled."""
     parsed_command = parse_local_command(normalized_input)
@@ -223,14 +229,28 @@ def _handle_local_command(
         print(ansi_message(WARNING_LABEL, build_unknown_command_message(command_name)))
         return True
 
+    if command_name == "/btw":
+        question = command_args.strip()
+        if not question:
+            print(
+                ansi_message(
+                    INFO_LABEL,
+                    "Usage: /btw <question> — ask a one-off question with the full "
+                    "conversation as context. Nothing is saved to the chat.",
+                )
+            )
+            return True
+        _run_side_question(question, current_chat, ctx)
+        return True
+
     if command_args:
         print(ansi_message(WARNING_LABEL, build_argument_error_message(command_name)))
         return True
 
     if command_name == "/vim":
-        config.vim_mode = not config.vim_mode
-        update_user_config("vim_mode", config.vim_mode)
-        status = "enabled" if config.vim_mode else "disabled"
+        ctx.config.vim_mode = not ctx.config.vim_mode
+        update_user_config("vim_mode", ctx.config.vim_mode)
+        status = "enabled" if ctx.config.vim_mode else "disabled"
         print(ansi_message(INFO_LABEL, f"Vim mode {status}."))
         return True
 
@@ -244,7 +264,7 @@ def _handle_local_command(
             )
             return True
 
-        bookmarked = chat_manager.toggle_bookmark(current_chat)
+        bookmarked = ctx.chat_manager.toggle_bookmark(current_chat)
         if bookmarked is not None:
             action = "Bookmarked" if bookmarked else "Removed bookmark from"
             print(
@@ -253,6 +273,48 @@ def _handle_local_command(
                 )
             )
     return True
+
+
+def _run_side_question(
+    question: str, current_chat: Chat, ctx: "ChatLoopContext"
+) -> None:
+    """Answer a one-off `/btw` question with full context, persisting nothing.
+
+    Runs a normal streamed turn against a throwaway copy of the history so the
+    model sees everything so far, but neither the question nor the answer is
+    appended to the chat or saved. The answer renders under an `AI (btw): `
+    label. Search/thinking follow the session's options.
+    """
+    side_messages = list(current_chat.messages)
+    parts: list = []
+    # On a brand-new chat the system prompt is still pending (not yet in
+    # history); include it transiently without consuming it.
+    if current_chat.pending_system_prompt:
+        parts.append(SystemPromptPart(current_chat.pending_system_prompt))
+    parts.append(UserPromptPart(question))
+    side_messages.append(ModelRequest(parts=parts))
+
+    options = replace(ctx.chat_options, assistant_label_text=BTW_AI_LABEL_TEXT)
+    capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
+
+    try:
+        ctx.llm_client.chat(
+            side_messages,
+            ctx.active_model,
+            options,
+            capabilities_override=capabilities_override,
+        )
+    except KeyboardInterrupt:
+        # Ctrl+C cancels just the side question; the main chat is untouched.
+        # Catch it here so it doesn't reach the loop's idle-exit handler.
+        print("", flush=True)
+    except Exception as exc:
+        print(
+            ansi_message(
+                ERROR_LABEL,
+                f"Request failed: {type(exc).__name__}: {exc}",
+            )
+        )
 
 
 def _update_title_from_first_user_message(current_chat: Chat) -> None:
@@ -325,9 +387,7 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
                 if not normalized_input:
                     continue
 
-                if _handle_local_command(
-                    normalized_input, ctx.config, current_chat, ctx.chat_manager
-                ):
+                if _handle_local_command(normalized_input, ctx, current_chat):
                     continue
 
             # Process normal input

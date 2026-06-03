@@ -9,6 +9,13 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- `/btw <question>` in-chat command for one-off side questions. The model
+  answers with the full conversation as context, but neither the question nor
+  the answer is appended to the chat or saved. Search and thinking follow the
+  session's settings; the reply renders under an `AI (btw):` label.
+
 ## [0.1.1] - 2026-06-03
 
 ### Added
