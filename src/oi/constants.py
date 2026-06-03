@@ -9,6 +9,11 @@ DEFAULT_PAGE_SIZE = 10
 INITIAL_PAGE = 0
 INITIAL_SELECTED_INDEX = 0
 
+# Chat preview pane (bottom layout, dynamic height)
+PREVIEW_MIN_HEIGHT = 6
+PREVIEW_MAX_HEIGHT = 20
+PREVIEW_SCROLL_LINES = 3
+
 # Model Configuration
 DEFAULT_FALLBACK_MODEL = "sonnet"
 

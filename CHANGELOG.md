@@ -11,6 +11,11 @@ config/`models.yaml` format, alias names).
 
 ### Added
 
+- Search, preview, and editor view in the `oi -r` chat selector. Press `/` to
+  filter chats by title or message text; Enter applies the filter and hands the
+  navigation keys back, Esc clears it. Tab toggles a preview pane showing the
+  conversation (`Ctrl+P`/`Ctrl+N` scroll, `gg`/`G` jump to top/bottom). Press
+  `e` to open the highlighted chat in `$EDITOR` as a clean Markdown transcript.
 - ChatGPT subscription billing for OpenAI models. `oi auth openai login` signs
   in with a ChatGPT Pro/Plus/Team plan; once logged in, Codex-eligible OpenAI
   models route through the subscription automatically (no API key needed and no

@@ -115,6 +115,7 @@ src/oi/
 │   ├── chat_selector.py # ChatSelector - interactive chat picker
 │   ├── image_paste.py # PasteStore (images + long text) + PillProcessor + clipboard image reader
 │   ├── labels.py      # Shared ANSI/Rich/prompt-toolkit label styling
+│   ├── transcript.py  # Shared plaintext/styled/search views of a chat (selector)
 │   └── stats_view.py  # Rich rendering for `oi stats` (heatmap, bars)
 ├── llm_types.py       # Shared chat/model capability dataclasses
 ├── app.py             # Main application orchestration + ChatLoopContext
@@ -157,6 +158,33 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - Automatic session persistence with metadata in `core/session.py`
 - Smart title generation (triggers after 8+ messages)
 - Auto-save functionality
+
+**Chat Selector Search / Preview / Editor (`ui/chat_selector.py`):**
+- Hand-rolled raw-key loop driving a Rich `Live` (NOT prompt_toolkit), so live
+  text entry (search), modes, and scroll are all handled manually.
+- `ui/transcript.py` is the shared formatter (built on `flatten_history`): the
+  same role+text view feeds the search blob (lowercased title+body), the
+  `$EDITOR` export (`**User:**`/`**AI:**` Markdown, `.md` temp file), and the
+  preview pane (Rich `Text` with `ui/labels.py` styling).
+- **Search** is modal: `/` enters typing mode and live-filters on a substring of
+  title+body; Enter *applies* (keeps the filter, returns the normal navigation
+  keybinds), Esc clears it (also clears a committed filter from normal mode). The
+  search index + `chat_cache` (id→`Chat`, `None` for unreadable) are built lazily
+  on first `/` so transcripts load once.
+- **Preview** is a full-width bottom pane toggled with Tab (side-by-side was
+  dropped — bottom shows both panes at once with more room). Height is
+  `clamp(term_h − list − chrome, PREVIEW_MIN_HEIGHT, PREVIEW_MAX_HEIGHT)`;
+  content is windowed via `console.render_lines` + a scroll offset that resets
+  on selection change. `Ctrl+P`/`Ctrl+N` scroll (fall back to list nav when the
+  pane is closed), `gg`/`G` jump to top/bottom.
+- **`e`** opens the highlighted chat in `$EDITOR` read-only. The stop/start dance
+  needs `console.control(Control.move(0, -1))` after `live.stop()`: `stop()`
+  emits a trailing newline, leaving the cursor one row below the frame, so the
+  next refresh's upward erase misses the top line and duplicates the header —
+  stepping up one row realigns it (do NOT use `transient=True`; it rewinds over
+  scrollback and corrupts it on tall terminals).
+- `_read_key_unix` peeks with `select()` after `\x1b` so a lone Esc doesn't block
+  waiting for the rest of an escape sequence (needed for Esc-to-clear).
 
 **Headless Mode:**
 - `-p MESSAGE` sends one turn and exits; composes with `-c` / `-r ID` to follow up against existing chats (appends in-place, same chat ID)
@@ -202,7 +230,8 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - `codex_auth` (core/codex_auth.py) - ChatGPT subscription login, token store/refresh, Codex routing client, rate-limit/exhaustion state
 - `ChatManager` (core/chat_manager.py) - Session persistence & management
 - `Chat`/`ChatMetadata` (core/session.py) - Data models
-- `ChatSelector` (ui/chat_selector.py) - Interactive chat selection
+- `ChatSelector` (ui/chat_selector.py) - Interactive chat selection (+ search/preview/editor)
+- `ui/transcript.py` - Shared plaintext/styled/search views of a chat
 - `InputHandler` (ui/input_handler.py) - User input handling
 - `local_commands.py` - Slash command definitions + completion helpers
 - `ui/labels.py` - Shared label text and styling helpers
