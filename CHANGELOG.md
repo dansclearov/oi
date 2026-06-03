@@ -26,6 +26,10 @@ config/`models.yaml` format, alias names).
 
 ### Changed
 
+- Resuming a chat now always prints a single "Continuing chat: …" banner,
+  regardless of how it was loaded (`-c`, `-r ID`, or the `-r` selector) or how
+  many messages it has. Previously `-r ID` also printed a redundant "Loaded
+  chat:" line, and short chats printed nothing at all.
 - `opus` alias now points to `claude-opus-4-8` (was `claude-opus-4-7`).
 - Require `pydantic-ai>=1.104.0`, the first release that recognizes
   `claude-opus-4-8`. Earlier versions gave it a fallback profile with no

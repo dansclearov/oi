@@ -144,13 +144,6 @@ def handle_chat_selection(
         if args.resume:  # Specific chat ID provided
             try:
                 current_chat = chat_manager.load_chat(args.resume)
-                if not quiet:
-                    print(
-                        ansi_message(
-                            INFO_LABEL,
-                            f"Loaded chat: {current_chat.metadata.title}",
-                        )
-                    )
             except (ChatNotFoundError, FileNotFoundError):
                 print(ansi_message(ERROR_LABEL, f"Chat not found: {args.resume}"))
                 sys.exit(1)
@@ -580,7 +573,7 @@ def main():
             )
 
     # Show continuation message for existing chats
-    if not is_new_chat and current_chat.metadata.message_count > 2:
+    if not is_new_chat:
         print(
             ansi_message(
                 INFO_LABEL,
