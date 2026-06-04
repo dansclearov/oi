@@ -67,6 +67,13 @@ class ResponseRenderer(ABC):
 
     def finish_response(self) -> None:
         """Finalize the response rendering."""
+        if self.was_interrupted:
+            # The chat loop prints a single newline to move past the partial
+            # line on interrupt; emitting our own finishing newlines here would
+            # stack blank lines before the next prompt.
+            self.thinking_section_open = False
+            return
+
         if self.thinking_section_open:
             self.close_thinking_section(final=True)
 

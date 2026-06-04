@@ -36,6 +36,10 @@ config/`models.yaml` format, alias names).
 
 ### Fixed
 
+- Interrupting a streaming reply with Ctrl+C no longer leaves blank lines before
+  the next prompt. The renderer was emitting its end-of-response newlines on top
+  of the chat loop's own, so the next `User:` now sits directly below the broken
+  stream (previously one blank line during output, two during thinking traces).
 - Anthropic models with a pinned thinking budget (Haiku) no longer think when
   thinking is disabled. Their `extra_params` budget was being merged
   unconditionally, so `--no-thinking` turns and the smart-title call still paid
