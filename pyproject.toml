@@ -1,6 +1,6 @@
 [project]
 name = "oi-chat"
-version = "0.1.1"
+version = "0.1.2"
 description = "Command-line chat interface for multiple LLM providers, with streaming output, persistent chats, and YAML-based model aliases."
 readme = "README.md"
 authors = [
