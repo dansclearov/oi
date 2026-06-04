@@ -18,6 +18,12 @@ config/`models.yaml` format, alias names).
 
 ### Changed
 
+- `--help` output is tidier: a short two-line usage that leads with the common
+  flags, options split into labeled groups (chat selection / model & prompt /
+  headless / behavior), and model/prompt choices moved out of the usage line
+  into their help text. `oi auth -h` now shows the available actions
+  (login/logout/status) directly instead of requiring a second `oi auth openai
+  -h`, and the subcommand usage lines no longer inherit a mangled prog.
 - The built-in default system prompt is now `empty` (no system prompt) instead
   of `general`. Modern models already cover what `general` steered, and a blank
   prompt better reflects the raw model. Set `default_prompt` in

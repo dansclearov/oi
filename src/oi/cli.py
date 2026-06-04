@@ -22,67 +22,90 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
     available_models = registry.get_display_models()
     available_prompts = sorted(set(get_prompts() + [DEFAULT_PROMPT_NAME]))
 
-    parser = argparse.ArgumentParser(description="Run an interactive LLM chat session.")
-    parser.add_argument(
-        "-P",
-        "--system-prompt",
-        choices=available_prompts,
-        default=_get_default_prompt_name(available_prompts),
-        help="Named system prompt to load from the prompts directory",
+    parser = argparse.ArgumentParser(
+        description="Run an interactive LLM chat session.",
+        add_help=False,
+        usage=(
+            "%(prog)s [-h] [-m MODEL] [-c] [-r [CHAT_ID]] [options]\n"
+            "       %(prog)s {stats,auth} ..."
+        ),
     )
-    parser.add_argument(
-        "-m",
-        "--model",
-        choices=available_models,
-        default=None,
-        help="Specify which model to use (defaults to the configured default for "
-        "new chats; ignored when resuming a chat)",
-    )
-    parser.add_argument(
+
+    selection = parser.add_argument_group("chat selection")
+    selection.add_argument(
         "-r",
         "--resume",
         nargs="?",
         const="",
         metavar="CHAT_ID",
-        help="Resume a chat: no ID shows selector, with ID loads specific chat",
+        help="Resume a chat (no ID shows the picker)",
     )
-    parser.add_argument(
+    selection.add_argument(
         "-c",
         "--continue",
         dest="continue_chat",
         action="store_true",
         help="Continue the most recent chat",
     )
-    parser.add_argument(
+
+    config = parser.add_argument_group("model & prompt")
+    config.add_argument(
+        "-m",
+        "--model",
+        choices=available_models,
+        default=None,
+        metavar="MODEL",
+        help=f"Model to use: {', '.join(available_models)} "
+        "(default: configured default; ignored when resuming)",
+    )
+    config.add_argument(
+        "-P",
+        "--system-prompt",
+        choices=available_prompts,
+        default=_get_default_prompt_name(available_prompts),
+        metavar="NAME",
+        help=f"Named system prompt: {', '.join(available_prompts)}",
+    )
+
+    headless = parser.add_argument_group("headless / scripting")
+    headless.add_argument(
         "-p",
         "--prompt",
         metavar="MESSAGE",
-        help="Send a single message and exit (headless mode)",
+        help="Send a single message and exit",
     )
-    parser.add_argument(
+    headless.add_argument(
         "--ephemeral",
         action="store_true",
-        help=(
-            "Do not persist this session. With -c/-r, runs the turn against "
-            "the existing chat without modifying it."
-        ),
+        help="Do not persist the session "
+        "(with -c/-r, runs against the chat without modifying it)",
     )
-    parser.add_argument(
+
+    behavior = parser.add_argument_group("behavior")
+    behavior.add_argument(
         "--search",
         action="store_true",
-        help="Enable search (if supported by model)",
+        help="Enable web search (if supported by the model)",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--no-thinking",
         action="store_true",
-        help="Disable thinking mode completely",
+        help="Disable thinking entirely",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--hide-thinking",
         action="store_true",
-        help="Hide thinking trace display",
+        help="Keep thinking on but don't display the traces",
     )
-    parser.add_argument(
+
+    other = parser.add_argument_group("other")
+    other.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        help="Show this help message and exit",
+    )
+    other.add_argument(
         "--user-paths",
         action="store_true",
         help="Print all user path locations and exit",
@@ -90,7 +113,10 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
 
     # Optional verb subcommands. With no verb, `command` is None and the args
     # above drive the normal chat path; chat flags must precede the verb token.
-    subparsers = parser.add_subparsers(dest="command")
+    # `prog` is pinned so subparser usage lines don't inherit the custom usage.
+    subparsers = parser.add_subparsers(
+        title="commands", dest="command", prog=parser.prog
+    )
     stats_parser = subparsers.add_parser(
         "stats", help="Show usage statistics across all chats"
     )
@@ -101,9 +127,15 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
     )
 
     auth_parser = subparsers.add_parser(
-        "auth", help="Manage provider subscription logins"
+        "auth",
+        help="Manage provider subscription logins",
+        usage="%(prog)s [-h] {openai} [{login,logout,status}]",
+        description="Log in to a provider subscription. Each provider takes an "
+        "action: login (default), logout, or status.",
     )
-    auth_providers = auth_parser.add_subparsers(dest="auth_provider")
+    auth_providers = auth_parser.add_subparsers(
+        title="providers", dest="auth_provider", prog=auth_parser.prog
+    )
     openai_auth = auth_providers.add_parser(
         "openai", help="Use your ChatGPT subscription for OpenAI models"
     )
