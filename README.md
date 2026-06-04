@@ -131,7 +131,8 @@ Set the default prompt for new chats in `~/.config/oi/config.json`:
 }
 ```
 
-An explicit `-P` still wins, for example `oi -P general`.
+With nothing configured, chats start with no system prompt (`empty`). An
+explicit `-P` still wins, for example `oi -P general`.
 
 ## Development
 

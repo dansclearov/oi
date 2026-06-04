@@ -18,6 +18,11 @@ config/`models.yaml` format, alias names).
 
 ### Changed
 
+- The built-in default system prompt is now `empty` (no system prompt) instead
+  of `general`. Modern models already cover what `general` steered, and a blank
+  prompt better reflects the raw model. Set `default_prompt` in
+  `~/.config/oi/config.json` or pass `-P` to override. The `general` prompt also
+  dropped its stale "don't use the online tool" line.
 - Smart titles are now generated with a fixed cheap model (`haiku`) instead of
   the chat's active model, so naming a chat never costs an expensive turn. When
   `ANTHROPIC_API_KEY` isn't configured, smart titling is skipped and the chat

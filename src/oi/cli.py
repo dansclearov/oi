@@ -5,7 +5,7 @@ from oi.prompts import get_prompts
 from oi.registry import ModelRegistry
 
 
-DEFAULT_PROMPT_NAME = "general"
+DEFAULT_PROMPT_NAME = "empty"
 
 
 def _get_default_prompt_name(available_prompts: list[str]) -> str:
