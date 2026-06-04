@@ -65,7 +65,7 @@ def test_parse_arguments_falls_back_when_configured_default_prompt_is_unknown(
 
     args = parse_arguments(registry)
 
-    assert args.system_prompt == "general"
+    assert args.system_prompt == "empty"
 
 
 def test_parse_arguments_headless_prompt_and_ephemeral(monkeypatch):
