@@ -3,7 +3,8 @@ aliases:
   sonnet: anthropic/claude-sonnet-4-6
   haiku: anthropic/claude-haiku-4-5
   opus: anthropic/claude-opus-4-8
-  fable: anthropic/claude-fable-5
+  # suspended per US gov directive 2026-06-12, see anthropic.com/news/fable-mythos-access
+  # fable: anthropic/claude-fable-5
   gpt: openai-responses/gpt-5.5
   gemini-pro: google/gemini-3.1-pro-preview
   gemini-flash: google/gemini-3.5-flash
@@ -37,15 +38,16 @@ anthropic:
       anthropic_cache_instructions: '5m'
       anthropic_cache_messages: '5m'
       anthropic_cache_tool_definitions: '5m'
-  claude-fable-5:
-    supports_search: true
-    supports_thinking: true
-    supports_vision: true
-    max_tokens: 128000
-    extra_params:
-      anthropic_cache_instructions: '5m'
-      anthropic_cache_messages: '5m'
-      anthropic_cache_tool_definitions: '5m'
+  # suspended — see fable alias above
+  # claude-fable-5:
+  #   supports_search: true
+  #   supports_thinking: true
+  #   supports_vision: true
+  #   max_tokens: 128000
+  #   extra_params:
+  #     anthropic_cache_instructions: '5m'
+  #     anthropic_cache_messages: '5m'
+  #     anthropic_cache_tool_definitions: '5m'
 
 openai-responses:
   gpt-5.5:

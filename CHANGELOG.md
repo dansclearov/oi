@@ -9,13 +9,6 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
-### Added
-
-- Claude Fable 5 (`anthropic/claude-fable-5`) and the `fable` alias. Anthropic's
-  most capable widely released model (1M context, 128K output, vision, adaptive
-  thinking); high-risk cyber/bio/chem prompts are blocked server-side and fall
-  back to Opus 4.8.
-
 ## [0.1.2] - 2026-06-04
 
 ### Added
