@@ -9,6 +9,13 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The interactive chat selector (`oi -r`) now adapts to the terminal size: the
+  number of rows shown fits the height, and rows, the header, and the help line
+  reflow to the width instead of wrapping. This makes it usable on narrow
+  screens, e.g. a phone over SSH.
+
 ## [0.1.2] - 2026-06-04
 
 ### Added

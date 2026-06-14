@@ -24,7 +24,6 @@ from oi.constants import (
     DEFAULT_PAGE_SIZE,
     INITIAL_PAGE,
     INITIAL_SELECTED_INDEX,
-    MAX_TITLE_LENGTH,
     NAVIGATION_KEYS,
     PREVIEW_MAX_HEIGHT,
     PREVIEW_MIN_HEIGHT,
@@ -39,6 +38,15 @@ CTRL_N = "\x0e"
 ESC = "\x1b"
 TAB = "\t"
 BACKSPACE = ("\x7f", "\x08")
+
+
+def clamp(value: int, low: int, high: int) -> int:
+    return max(low, min(high, value))
+
+
+# Title column below this many cols isn't worth keeping the date/meta columns —
+# the row collapses to a title-forward layout instead (e.g. on a phone).
+MIN_FULL_TITLE_WIDTH = 12
 
 
 class ChatSelector:
@@ -64,7 +72,7 @@ class ChatSelector:
 
         all_chats = chats
         bookmarked_only = False
-        page_size = DEFAULT_PAGE_SIZE
+        page_size = self._compute_page_size(preview_open=False, searching=False)
         current_page = INITIAL_PAGE
         selected_index = INITIAL_SELECTED_INDEX
 
@@ -114,10 +122,16 @@ class ChatSelector:
         def render_selection():
             visible_chats = visible()
             page_chats = self._get_page_chats(visible_chats, current_page, page_size)
+            width = self.console.size.width
             output = []
 
             scope = "bookmarked" if bookmarked_only else "all"
-            header = f"Select a chat to continue ({scope} chats, {current_page + 1}/{total_pages}):"
+            full_header = f"Select a chat to continue ({scope} chats, {current_page + 1}/{total_pages}):"
+            header = (
+                full_header
+                if len(full_header) <= width
+                else f"Chats ({scope} {current_page + 1}/{total_pages}):"
+            )
             output.append(header)
             if search_mode or search_query:
                 cursor = "_" if search_mode else ""
@@ -134,39 +148,30 @@ class ChatSelector:
                 output.append("")
                 output.append(
                     self._help_line(
-                        total_pages, search_mode, preview_open, bool(search_query)
+                        total_pages,
+                        search_mode,
+                        preview_open,
+                        bool(search_query),
+                        width,
                     )
                 )
                 return "\n".join(output)
 
             for i, chat in enumerate(page_chats):
-                date_str = chat.updated_at.strftime("%Y-%m-%d %H:%M")
-                title = (
-                    chat.title[:MAX_TITLE_LENGTH] + "..."
-                    if len(chat.title) > MAX_TITLE_LENGTH
-                    else chat.title
+                output.append(
+                    self._format_chat_row(
+                        chat,
+                        i + 1,
+                        selected=i == selected_index,
+                        search_mode=search_mode,
+                        width=width,
+                    )
                 )
-                bookmark_marker = "★" if chat.bookmarked else " "
-                meta = f"[bright_black]({chat.model}, {chat.message_count} msgs)[/bright_black]"
-
-                if i == selected_index and not search_mode:
-                    output.append(
-                        f"[bright_yellow]❯ {i + 1:2}. {bookmark_marker} [{date_str}] {title:<78} "
-                        f"{meta}[/bright_yellow]"
-                    )
-                elif i == selected_index:
-                    output.append(
-                        f"[cyan]❯ {i + 1:2}. {bookmark_marker} [{date_str}] {title:<78} [/cyan]{meta}"
-                    )
-                else:
-                    output.append(
-                        f"  {i + 1:2}. {bookmark_marker} [{date_str}] {title:<78} {meta}"
-                    )
 
             output.append("")
             output.append(
                 self._help_line(
-                    total_pages, search_mode, preview_open, bool(search_query)
+                    total_pages, search_mode, preview_open, bool(search_query), width
                 )
             )
 
@@ -193,6 +198,10 @@ class ChatSelector:
             ) as live:
                 while True:
                     visible_chats = visible()
+                    page_size = self._compute_page_size(
+                        preview_open=preview_open,
+                        searching=search_mode or bool(search_query),
+                    )
                     current_page, selected_index, total_pages = (
                         self._clamp_selection_state(
                             visible_chats, page_size, current_page, selected_index
@@ -348,20 +357,97 @@ class ChatSelector:
         search_mode: bool,
         preview_open: bool,
         has_search: bool,
+        width: int,
     ) -> str:
         if search_mode:
-            return "[dim]type to filter, ↑/↓: navigate, Enter: apply, Tab: preview, Esc: clear[/dim]"
-        keys = ["↑/↓/k/j: navigate", "Enter: open", "/: search", "Tab: preview"]
+            variants = [
+                "type to filter, ↑/↓: navigate, Enter: apply, Tab: preview, Esc: clear",
+                "filter · ↑/↓ · Enter apply · Esc clear",
+                "↑/↓ Enter Esc",
+            ]
+        else:
+            keys = ["↑/↓/k/j: navigate", "Enter: open", "/: search", "Tab: preview"]
+            if preview_open:
+                keys.append("Ctrl+P/N: scroll, gg/G: top/bottom")
+            keys.append("e: editor")
+            if total_pages > 1:
+                keys.append("n/p: pages")
+            keys.extend(["b: bookmark", "f: filter", "dd: delete"])
+            if has_search:
+                keys.append("Esc: clear search")
+            keys.append("q: quit")
+            variants = [
+                ", ".join(keys),
+                "↑/↓ · Enter open · /: search · q quit",
+                "↑/↓ Enter / q",
+            ]
+        # Pick the richest hint that fits on one row; the last is the floor.
+        text = next((v for v in variants if len(v) <= width), variants[-1])
+        return f"[dim]{text}[/dim]"
+
+    def _compute_page_size(self, *, preview_open: bool, searching: bool) -> int:
+        """Fit the list to the terminal height, capped at DEFAULT_PAGE_SIZE and
+        never below one row. ``reserved`` mirrors the non-entry rows
+        render_selection draws around the list — the header, the blank above and
+        below, and the help line (plus the search line when searching). An open
+        preview also reserves its separator rule and minimum band. The header and
+        help line are kept to one row each (see _help_line / the header fallback),
+        so this count stays honest on narrow screens."""
+        reserved = 4 + (1 if searching else 0)
         if preview_open:
-            keys.append("Ctrl+P/N: scroll, gg/G: top/bottom")
-        keys.append("e: editor")
-        if total_pages > 1:
-            keys.append("n/p: pages")
-        keys.extend(["b: bookmark", "f: filter", "dd: delete"])
-        if has_search:
-            keys.append("Esc: clear search")
-        keys.append("q: quit")
-        return f"[dim]{', '.join(keys)}[/dim]"
+            reserved += 1 + PREVIEW_MIN_HEIGHT
+        return clamp(self.console.size.height - reserved, 1, DEFAULT_PAGE_SIZE)
+
+    def _format_chat_row(
+        self,
+        chat: ChatMetadata,
+        display_index: int,
+        *,
+        selected: bool,
+        search_mode: bool,
+        width: int,
+    ) -> str:
+        """Render one chat row. Collapses to a title-forward layout (no date or
+        meta) when the full layout would overflow the terminal width."""
+        bookmark_marker = "★" if chat.bookmarked else " "
+        date_str = chat.updated_at.strftime("%Y-%m-%d %H:%M")
+        meta_plain = f"({chat.model}, {chat.message_count} msgs)"
+        # Fixed columns: marker+index+bookmark (8), "[date] " (19), a trailing
+        # space, and the meta tag. The title column flexes between them, capped at
+        # 78 so wide terminals render exactly as before. Below a usable title
+        # width the row collapses to a title-forward layout (no date/meta).
+        title_col = min(78, width - 8 - 19 - 1 - len(meta_plain))
+
+        if title_col >= MIN_FULL_TITLE_WIDTH:
+            title = (
+                chat.title[: title_col - 3] + "..."
+                if len(chat.title) > title_col
+                else chat.title
+            )
+            meta = f"[bright_black]{meta_plain}[/bright_black]"
+            if selected and not search_mode:
+                return (
+                    f"[bright_yellow]❯ {display_index:2}. {bookmark_marker} "
+                    f"[{date_str}] {title:<{title_col}} {meta}[/bright_yellow]"
+                )
+            if selected:
+                return (
+                    f"[cyan]❯ {display_index:2}. {bookmark_marker} "
+                    f"[{date_str}] {title:<{title_col}} [/cyan]{meta}"
+                )
+            return f"  {display_index:2}. {bookmark_marker} [{date_str}] {title:<{title_col}} {meta}"
+
+        marker = "❯" if selected else " "
+        prefix = f"{marker} {display_index:2}. {bookmark_marker} "
+        avail = max(1, width - len(prefix))
+        title = (
+            chat.title if len(chat.title) <= avail else chat.title[: avail - 1] + "…"
+        )
+        if selected and not search_mode:
+            return f"[bright_yellow]{prefix}{title}[/bright_yellow]"
+        if selected:
+            return f"[cyan]{prefix}{title}[/cyan]"
+        return f"{prefix}{title}"
 
     def _render_preview(
         self,
@@ -374,9 +460,8 @@ class ChatSelector:
         """Render the bottom preview pane, windowed to the available height."""
         width, term_height = self.console.size
         # Reserve the list block + the rule separator; clamp to a usable band.
-        height = max(
-            PREVIEW_MIN_HEIGHT,
-            min(PREVIEW_MAX_HEIGHT, term_height - list_lines - 2),
+        height = clamp(
+            term_height - list_lines - 2, PREVIEW_MIN_HEIGHT, PREVIEW_MAX_HEIGHT
         )
 
         if chat is None:
