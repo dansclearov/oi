@@ -1,6 +1,6 @@
 aliases:
   default: sonnet
-  sonnet: anthropic/claude-sonnet-4-6
+  sonnet: anthropic/claude-sonnet-5
   haiku: anthropic/claude-haiku-4-5
   opus: anthropic/claude-opus-4-8
   # suspended per US gov directive 2026-06-12, see anthropic.com/news/fable-mythos-access
@@ -10,7 +10,7 @@ aliases:
   gemini-flash: google/gemini-3.5-flash
 
 anthropic:
-  claude-sonnet-4-6:
+  claude-sonnet-5:
     supports_search: true
     supports_thinking: true
     supports_vision: true

@@ -11,6 +11,9 @@ config/`models.yaml` format, alias names).
 
 ### Changed
 
+- The `sonnet` alias now points to Claude Sonnet 5 (`claude-sonnet-5`),
+  replacing Claude Sonnet 4.6.
+
 - The interactive chat selector (`oi -r`) now adapts to the terminal size: the
   number of rows shown fits the height, and rows, the header, and the help line
   reflow to the width instead of wrapping. This makes it usable on narrow
