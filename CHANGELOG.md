@@ -9,6 +9,12 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- Claude Fable 5 (`anthropic/claude-fable-5`) and the `fable` alias. Anthropic's
+  most capable widely released model (1M context, 128K output, vision, adaptive
+  thinking). High-risk cyber/bio/chem prompts are blocked server-side.
+
 ### Changed
 
 - The `sonnet` alias now points to Claude Sonnet 5 (`claude-sonnet-5`),
