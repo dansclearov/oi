@@ -25,6 +25,12 @@ config/`models.yaml` format, alias names).
   reflow to the width instead of wrapping. This makes it usable on narrow
   screens, e.g. a phone over SSH.
 
+### Fixed
+
+- Multi-line pastes in terminals that send `\r` line endings in bracketed
+  paste (e.g. iTerm2) no longer render garbled in the input buffer, and their
+  lines now count toward the paste-pill threshold.
+
 ## [0.1.2] - 2026-06-04
 
 ### Added

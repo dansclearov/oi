@@ -56,7 +56,10 @@ class InputHandler:
             # when total content exceeds terminal height (prompt_toolkit's
             # diff-based renderer can't progressively commit rows to scrollback).
             # Char threshold catches long single-line paragraphs that wrap.
-            pasted = event.data
+            # Normalize to \n first: some terminals (iTerm2) send \r or \r\n
+            # line endings in bracketed pastes, which breaks both the line
+            # count below and the buffer rendering (\r rewinds the cursor).
+            pasted = event.data.replace("\r\n", "\n").replace("\r", "\n")
             is_large = (
                 pasted.count("\n") + 1 >= PASTE_LINE_THRESHOLD
                 or len(pasted) >= PASTE_CHAR_THRESHOLD

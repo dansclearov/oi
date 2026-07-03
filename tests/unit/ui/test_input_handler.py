@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
+from prompt_toolkit.keys import Keys
 from prompt_toolkit.shortcuts import CompleteStyle
 
 from oi.local_commands import SlashCommandCompleter
@@ -52,6 +53,41 @@ def test_get_user_input_passes_slash_command_completer():
     assert isinstance(kwargs["completer"], SlashCommandCompleter)
     assert kwargs["complete_style"] == CompleteStyle.READLINE_LIKE
     assert kwargs["erase_when_done"] is True
+
+
+def _paste(input_handler, data):
+    """Fire the BracketedPaste binding with `data`; return the fake event."""
+    patcher, session_class, _ = _patch_session(return_value="")
+    with patcher:
+        input_handler.get_user_input()
+
+    bindings = session_class.call_args.kwargs["key_bindings"]
+    (binding,) = bindings.get_bindings_for_keys((Keys.BracketedPaste,))
+    event = MagicMock()
+    event.data = data
+    binding.handler(event)
+    return event
+
+
+def test_bracketed_paste_normalizes_cr_line_endings():
+    # iTerm2 sends \r (or \r\n) as the line separator in bracketed pastes;
+    # raw \r in the buffer rewinds the cursor and mangles rendering.
+    input_handler = InputHandler()
+
+    event = _paste(input_handler, "one\rtwo\r\nthree")
+
+    event.app.current_buffer.insert_text.assert_called_once_with("one\ntwo\nthree")
+
+
+def test_bracketed_paste_cr_lines_count_toward_pill_threshold():
+    input_handler = InputHandler()
+    lines = [f"line {n}" for n in range(6)]
+
+    event = _paste(input_handler, "\r".join(lines))
+
+    (sentinel,) = event.app.current_buffer.insert_text.call_args.args
+    assert input_handler.paste_store.is_sentinel(sentinel)
+    assert input_handler.paste_store.split(sentinel) == ["\n".join(lines)]
 
 
 def test_slash_command_completer_suggests_known_commands_only():
