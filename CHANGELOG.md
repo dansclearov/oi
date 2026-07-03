@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-03
+
 ### Added
 
 - Claude Fable 5 (`anthropic/claude-fable-5`) and the `fable` alias. Anthropic's
@@ -129,7 +131,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/dansclearov/oi/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/dansclearov/oi/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/dansclearov/oi/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dansclearov/oi/releases/tag/v0.1.0
