@@ -42,6 +42,10 @@ export GEMINI_API_KEY=...
 export OPENROUTER_API_KEY=...
 ```
 
+To keep oi's billing separate from your shell environment, put keys in
+`~/.config/oi/env` (dotenv format, same variable names) instead — keys set
+there take precedence over the environment.
+
 If `ANTHROPIC_API_KEY` is set, longer chats get an auto-generated title via a
 tiny Haiku call (a fraction of a cent); without it, chats just keep their
 first-message title.

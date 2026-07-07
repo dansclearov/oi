@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from platformdirs import user_config_dir, user_data_dir
 
 from oi.cli import parse_arguments
-from oi.config.settings import Config, update_user_config
+from oi.config.settings import Config, load_env_file, update_user_config
 from oi.constants import (
     MAX_TITLE_LENGTH,
     MIN_MESSAGES_FOR_SMART_TITLE,
@@ -73,6 +73,7 @@ def print_user_paths() -> None:
     print(f"  - User config file: {config_dir / 'config.json'}")
     print(f"  - User prompts: {config_dir / 'prompts'}/ (*.txt files)")
     print(f"  - User model overrides: {config_dir / 'models.yaml'}")
+    print(f"  - API keys: {config_dir / 'env'} (overrides global environment)")
 
     # Data directory
     chat_dir = os.getenv("OI_CHAT_DIR", str(data_dir / "chats"))
@@ -90,6 +91,7 @@ def print_user_paths() -> None:
         config_dir / "config.json",
         config_dir / "prompts",
         config_dir / "models.yaml",
+        config_dir / "env",
         Path(chat_dir),
     ]
 
@@ -584,6 +586,7 @@ def run_auth(args) -> None:
 
 def main():
     """Main entry point for the LLM CLI application."""
+    load_env_file()
     registry = ModelRegistry()
     args = parse_arguments(registry)
 

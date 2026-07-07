@@ -9,6 +9,13 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- oi-scoped API keys: `~/.config/oi/env` (dotenv format) is loaded at startup
+  and overrides inherited environment variables, so oi's billing is isolated
+  from shell/global keys. Keys not set in the file still fall back to the
+  environment.
+
 ## [0.1.3] - 2026-07-03
 
 ### Added

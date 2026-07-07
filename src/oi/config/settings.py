@@ -6,7 +6,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from platformdirs import user_config_dir, user_data_dir
+
+
+def get_env_file_path() -> Path:
+    """Get the path to oi's own env file (API keys)."""
+    return Path(user_config_dir("oi", ensure_exists=True)) / "env"
+
+
+def load_env_file() -> None:
+    """Load oi's env file over the inherited environment, if it exists."""
+    load_dotenv(get_env_file_path(), override=True)
 
 
 def get_user_config_path() -> Path:
