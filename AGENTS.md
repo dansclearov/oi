@@ -85,8 +85,10 @@ notes are the matching `CHANGELOG.md` section, with the build artifacts attached
 2. In `CHANGELOG.md`, move the `[Unreleased]` entries under a new
    `## [x.y.z] - <date>` heading (add a fresh empty `[Unreleased]`; update the
    link refs at the bottom).
-3. Commit and push `main`.
-4. `git tag vX.Y.Z && git push origin vX.Y.Z` — the workflow does the rest.
+3. Run `uv lock` — `uv.lock` pins `oi-chat`'s own version, so it goes stale on
+   every bump. Commit it with the release; otherwise it drifts a version behind.
+4. Commit and push `main`.
+5. `git tag vX.Y.Z && git push origin vX.Y.Z` — the workflow does the rest.
 
 Keep notable changes under `CHANGELOG.md`'s `[Unreleased]` as you go: the release
 job extracts the per-version section, so it must exist before tagging. Pre-1.0,
