@@ -20,8 +20,9 @@
 # -------------------------------------------------------------------
 # Add new models from additional providers:
 
-# OpenAI standard API (non-reasoning models):
-# openai:
+# OpenAI Chat Completions API (non-reasoning models).
+# The bare `openai:` prefix routes to the Responses API, not this one.
+# openai-chat:
 #   chatgpt-4o-latest: {}
 #   gpt-4.5-preview: {}
 #   gpt-4-turbo: {}
