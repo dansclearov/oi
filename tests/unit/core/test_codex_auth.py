@@ -26,7 +26,7 @@ def _make_jwt(claims: dict) -> str:
 
 class TestInjectEmptyInstructions:
     def test_adds_key_when_absent(self):
-        out = codex_auth._inject_empty_instructions(b'{"model": "gpt-5.5"}')
+        out = codex_auth._inject_empty_instructions(b'{"model": "m"}')
         assert out is not None
         assert json.loads(out)["instructions"] == ""
 

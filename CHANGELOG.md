@@ -9,6 +9,12 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The `gpt` alias now points to OpenAI's GPT-5.6 Sol
+  (`openai-responses/gpt-5.6-sol`), replacing GPT-5.5. Sol is the flagship tier
+  of the new GPT-5.6 family and remains subscription-eligible.
+
 ## [0.1.4] - 2026-07-07
 
 ### Added
