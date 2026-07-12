@@ -27,8 +27,16 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         add_help=False,
         usage=(
             "%(prog)s [-h] [-m MODEL] [-c] [-r [CHAT_ID]] [options]\n"
-            "       %(prog)s {stats,auth} ..."
+            "       %(prog)s {stats,auth,docs} ..."
         ),
+        epilog=(
+            "configuration:\n"
+            "  Models and aliases live in a user models.yaml (--user-paths prints\n"
+            "  its location). To add or override models — config shape, pydantic-ai\n"
+            "  model names, API keys — run: %(prog)s docs models\n"
+            "  (LLM-agent-oriented; point your coding agent at it)"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     selection = parser.add_argument_group("chat selection")
@@ -124,6 +132,18 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         "--deep",
         action="store_true",
         help="Scan full transcripts for token, word, and image stats (slower)",
+    )
+
+    docs_parser = subparsers.add_parser(
+        "docs",
+        help="Print detailed docs for a topic, written for LLM agents",
+    )
+    docs_parser.add_argument(
+        "topic",
+        nargs="?",
+        choices=["models"],
+        default="models",
+        help="Doc topic (defaults to models)",
     )
 
     auth_parser = subparsers.add_parser(

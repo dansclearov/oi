@@ -209,6 +209,24 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - `StatsCollector.collect()` (`core/stats.py`) does a cheap metadata-only pass; `--deep` also loads each transcript to count user/AI words (and the wordiest chat). Words come from text parts, so they exclude thinking traces and search results — token counts are intentionally not reported (input is cumulative, output is dominated by reasoning).
 - Keep `core/stats.py` Rich-free; rendering lives in `ui/stats_view.py`.
 
+**LLM-First Docs (`oi docs`):**
+- `oi docs [topic]` (only topic: `models`, the default) prints a Markdown guide
+  to stdout, written primarily for coding agents (Claude Code etc.) editing the
+  user's `models.yaml` on request. The `--help` epilog advertises it — that's
+  the agents' discovery hook; keep the epilog short and put payload in the doc.
+- Content lives in `src/oi/docs/<topic>.md` (ships in the wheel like `prompts/`),
+  rendered by `app.py:run_docs()` via `string.Template.safe_substitute` — NOT
+  `str.format`, because the YAML examples contain literal `{}`. Substitutions
+  make the doc self-contained (fewer agent round trips): resolved user
+  `models.yaml` path + whether it exists, env-file path, and the verbatim
+  built-in `models.yaml` as the merge base (read at print time so it can't
+  drift from the shipped defaults).
+- The doc deliberately tells agents to have the user add API keys themselves
+  (after the config work is done) instead of asking for the key
+  in-conversation, so keys don't end up in logs or provider training data.
+- New pydantic-ai gotchas (prefix renames, extras) belong in the doc's
+  "naming traps" section too, not just in this file and `models_template.yaml`.
+
 **ChatGPT Subscription Billing (OpenAI, `core/codex_auth.py`):**
 - `oi auth openai [login|logout|status]` (login is the default; bare `oi auth` prints status). `cli.py` nests provider→action subparsers; `app.py:run_auth()` dispatches. Login is a browser PKCE OAuth flow (reusing Codex's `client_id`) with a `localhost:1455` loopback; tokens are stored at `~/.config/oi/auth/openai.json` (mode `0600`) and auto-refreshed near expiry.
 - **Seamless routing**: when logged in, a model with `supports_subscription: true` (only on `openai-responses` gpt-5.x) bills to the ChatGPT subscription instead of the API key — no `models.yaml` change, no separate provider/alias. `client.py` builds an `OpenAIResponsesModel` **instance** pointed at the Codex backend (`CODEX_BASE_URL = https://chatgpt.com/backend-api/codex`) with a token-injecting httpx client, and passes that instance (not the `provider:model` string) to `model_request_stream`; everything else stays on the API key. Eligibility is the capability flag, gated by `_use_subscription()` / surfaced by `subscription_billing_active()`. `OI_NO_SUBSCRIPTION=1` forces the API key.

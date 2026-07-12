@@ -543,6 +543,30 @@ def run_stats(args) -> None:
     render_stats(StatsCollector(manager).collect(deep=args.deep))
 
 
+def run_docs(args) -> None:
+    """Print LLM-agent-oriented docs for a topic, then exit."""
+    from importlib import resources
+    from string import Template
+
+    from oi.config.settings import get_env_file_path
+
+    docs_dir = resources.files("oi").joinpath("docs")
+    doc = docs_dir.joinpath(f"{args.topic}.md").read_text()
+    default_config = resources.files("oi").joinpath("models.yaml").read_text()
+    user_models_path = Path(user_config_dir("oi")) / "models.yaml"
+    user_models_status = (
+        "exists" if user_models_path.exists() else "created on first run"
+    )
+    print(
+        Template(doc).safe_substitute(
+            user_models_path=user_models_path,
+            user_models_status=user_models_status,
+            env_file_path=get_env_file_path(),
+            default_config=default_config.strip(),
+        )
+    )
+
+
 def _print_openai_auth_status() -> None:
     """Print whether an OpenAI subscription login is active."""
     from oi.core import codex_auth
@@ -596,6 +620,10 @@ def main():
 
     if getattr(args, "command", None) == "auth":
         run_auth(args)
+        return
+
+    if getattr(args, "command", None) == "docs":
+        run_docs(args)
         return
 
     # Handle --user-paths command

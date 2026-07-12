@@ -9,6 +9,15 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- `oi docs models`: LLM-agent-oriented documentation for adding models to the
+  user `models.yaml` — config shape, pydantic-ai 2.x naming traps, API key
+  handling (keys should never pass through the agent conversation), a
+  verification command, and the built-in default config (the merge base), with
+  user paths resolved into the text. `oi --help` now points to it via a new
+  epilog, so coding agents discover it on their own.
+
 ### Changed
 
 - Upgraded to Pydantic AI 2.x (`pydantic-ai[groq,xai]>=2.9.0,<3.0`). oi's own

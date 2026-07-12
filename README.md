@@ -117,6 +117,10 @@ Notes:
 - Top-level keys starting with `_` are ignored (useful for YAML anchors/metadata).
 - `extra_params` is passed through for provider-specific model settings.
 - On first run, `~/.config/oi/models.yaml` is auto-created from a template.
+- `oi docs models` prints the full guide to adding models (config shape,
+  pydantic-ai model names, API keys, the built-in defaults). It's written for
+  LLM agents — if you use a coding agent like Claude Code, just ask it to add
+  the model and it will find the guide via `oi --help`.
 
 ## Prompts
 
