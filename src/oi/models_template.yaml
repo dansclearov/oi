@@ -1,19 +1,18 @@
-# LLM CLI User Model Configuration
+# oi User Model Configuration
 # This file was auto-generated. Customize as needed.
 #
 # How this works:
 # - This config is MERGED with the built-in models.yaml
 # - You only need to add NEW models or OVERRIDE existing ones
-# - Built-in aliases: sonnet, haiku, opus, gpt, gemini-pro, gemini-flash
+# - Built-in aliases: sonnet, haiku, opus, fable, gpt, gemini-pro, gemini-flash
 # - Top-level keys starting with _ are ignored (use for YAML anchors or to disable providers)
 #
 # Override and custom alias examples:
 
 # aliases:
 #   default: haiku  # Override the default model
-#   gpt: openai-responses/gpt-5  # Override built-in gpt alias
-#   r1: openrouter/deepseek/deepseek-r1-0528  # Add custom aliases
-#   r1-free: "openrouter/deepseek/deepseek-r1-0528:free"
+#   gpt: openai-responses/gpt-5.6-terra  # Override built-in gpt alias
+#   ds: openrouter/deepseek/deepseek-v4-pro  # Add custom aliases
 #   llama: groq/llama-3.3-70b-versatile
 #   kimi: moonshotai/kimi-latest
 
@@ -23,25 +22,26 @@
 # OpenAI Chat Completions API (non-reasoning models).
 # The bare `openai:` prefix routes to the Responses API, not this one.
 # openai-chat:
-#   chatgpt-4o-latest: {}
-#   gpt-4.5-preview: {}
-#   gpt-4-turbo: {}
+#   gpt-5.3-chat-latest: {}
+#   gpt-4.1: {}
+#   gpt-4o: {}
 
-# More OpenAI Responses API models:
+# More OpenAI Responses API models (the reasoning models).
+# The built-in `gpt` alias points at gpt-5.6-sol; these are its siblings.
+# `supports_subscription` bills to a ChatGPT login (see `oi auth openai`)
+# instead of the API key; it applies to gpt-5.x on this provider.
 # openai-responses:
-#   gpt-5:
+#   gpt-5.6-terra:
 #     supports_thinking: true
 #     supports_search: true
 #     supports_vision: true
-#   gpt-5-mini:
+#     supports_subscription: true
+#   gpt-5.6-luna:
 #     supports_thinking: true
 #     supports_search: true
 #     supports_vision: true
-#   o4-mini:
-#     supports_thinking: true
-#     supports_search: true
-#     supports_vision: true
-#   o3:
+#     supports_subscription: true
+#   gpt-5.4-mini:
 #     supports_thinking: true
 #     supports_search: true
 #     supports_vision: true
@@ -52,13 +52,12 @@
 #     quantizations: ["fp8", "fp16", "bf16", "fp32", "unknown"]
 #
 # openrouter:
-#   "deepseek/deepseek-r1-0528:free":
+#   deepseek/deepseek-v4-pro:
 #     supports_thinking: true
 #     supports_search: true
 #     extra_params:
 #       <<: *openrouter_min_fp8
-#   deepseek/deepseek-r1-0528:
-#     supports_thinking: true
+#   deepseek/deepseek-v4-flash:
 #     supports_search: true
 #     extra_params:
 #       <<: *openrouter_min_fp8
@@ -69,24 +68,35 @@
 
 # xAI Grok models:
 # xai:
-#   grok-4:
+#   grok-4.5:
 #     supports_thinking: true
-#   grok-4.1: {}
+#   grok-4-fast-non-reasoning: {}
 
 # Moonshot AI (Kimi) models:
 # moonshotai:
 #   kimi-latest:
 #     supports_search: false
-#   kimi-k2-thinking:
+#   kimi-k2.6:
+#     supports_search: false
+#   kimi-thinking-preview:
 #     supports_thinking: true
 #     supports_search: false
 
 # Groq models:
 # groq:
 #   llama-3.3-70b-versatile: {}
+#   openai/gpt-oss-120b: {}
 
 # -------------------------------------------------------------------
 # Additional pydantic-ai providers:
-# azure, bedrock, cerebras, cohere, deepseek, fireworks, gateway,
-# github, google, google-cloud, heroku, huggingface, litellm, mistral,
-# nebius, ollama, outlines, ovhcloud, together, vercel
+# alibaba, azure, bedrock, cerebras, cohere, deepseek, fireworks, gateway,
+# github, google-cloud, heroku, huggingface, litellm, mistral, nebius,
+# ollama, ovhcloud, sambanova, together, vercel, zai
+#
+# Pydantic AI 2.x ships provider SDKs as opt-in extras, and oi only bundles
+# some of them. OpenAI-compatible providers (deepseek, openrouter, moonshotai,
+# together, ...) work out of the box; others (bedrock, cohere, mistral,
+# huggingface, ...) raise ImportError until you install the matching extra:
+#
+#   uv tool install oi-chat --with 'pydantic-ai[mistral]'   # recommended
+#   pipx inject oi-chat 'pydantic-ai[mistral]'

@@ -30,6 +30,11 @@ config/`models.yaml` format, alias names).
 
   oi's built-in models are unaffected — they already use `openai-responses`,
   `anthropic`, and `google`.
+- Refreshed the commented examples in `models_template.yaml`, which had drifted
+  far enough that four of the model IDs no longer existed at all
+  (`gpt-4.5-preview`, `chatgpt-4o-latest`, `grok-4.1`, `kimi-k2-thinking`, plus
+  OpenRouter's retired `deepseek-r1-0528:free`). They now point at current
+  models, and the footer notes which providers need an opt-in Pydantic AI extra.
 
 ## [0.1.5] - 2026-07-12
 
