@@ -67,7 +67,7 @@
 #       <<: *openrouter_min_fp8
 
 # xAI Grok models:
-# grok:
+# xai:
 #   grok-4:
 #     supports_thinking: true
 #   grok-4.1: {}

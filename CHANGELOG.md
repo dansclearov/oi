@@ -9,6 +9,19 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded to Pydantic AI 2.x (`pydantic-ai[xai]>=2.9.0,<3.0`). oi's own code
+  needed no changes — it builds on the `direct` API, so v2's rewrite of the
+  `Agent` / harness layer doesn't touch it. The `xai` extra is now requested
+  explicitly because 2.x stopped bundling provider extras by default.
+- **If you have a custom `~/.config/oi/models.yaml`,** two Pydantic AI 2.x
+  changes may affect it. The bare `openai` provider prefix now points at the
+  Responses API (it was Chat Completions); entries under `openai:` that want the
+  old behaviour must move to `openai-chat:`. And the xAI provider prefix is now
+  `xai:` — the `grok:` alias was removed. oi's built-in models are unaffected;
+  they already use `openai-responses`, `anthropic`, and `google`.
+
 ## [0.1.5] - 2026-07-12
 
 ### Changed
