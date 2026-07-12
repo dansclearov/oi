@@ -545,7 +545,7 @@ def run_stats(args) -> None:
 
 def run_docs(args) -> None:
     """Print LLM-agent-oriented docs for a topic, then exit."""
-    from importlib import resources
+    from importlib import metadata, resources
     from string import Template
 
     from oi.config.settings import get_env_file_path
@@ -557,11 +557,20 @@ def run_docs(args) -> None:
     user_models_status = (
         "exists" if user_models_path.exists() else "created on first run"
     )
+    try:
+        pydantic_ai_version = metadata.version("pydantic-ai")
+    except metadata.PackageNotFoundError:
+        pydantic_ai_version = "unknown"
+    api_keys_present = ", ".join(
+        sorted(name for name in os.environ if name.endswith("_API_KEY"))
+    )
     print(
         Template(doc).safe_substitute(
             user_models_path=user_models_path,
             user_models_status=user_models_status,
             env_file_path=get_env_file_path(),
+            pydantic_ai_version=pydantic_ai_version,
+            api_keys_present=api_keys_present or "(none)",
             default_config=default_config.strip(),
         )
     )

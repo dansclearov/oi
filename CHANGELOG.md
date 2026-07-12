@@ -17,6 +17,12 @@ config/`models.yaml` format, alias names).
   verification command, and the built-in default config (the merge base), with
   user paths resolved into the text. `oi --help` now points to it via a new
   epilog, so coding agents discover it on their own.
+- Hardened `oi docs models` after agent field-testing: it now spells out that
+  the per-model schema and the provider set are closed (unknown YAML keys are
+  silently ignored; providers not shipped by pydantic-ai can't be added via
+  config), links pydantic-ai's raw-Markdown docs as the authoritative provider
+  reference, and reports which `*_API_KEY` env vars are set — names only — so
+  agents never need to read the secrets file.
 
 ### Changed
 

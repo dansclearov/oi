@@ -218,9 +218,20 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   rendered by `app.py:run_docs()` via `string.Template.safe_substitute` — NOT
   `str.format`, because the YAML examples contain literal `{}`. Substitutions
   make the doc self-contained (fewer agent round trips): resolved user
-  `models.yaml` path + whether it exists, env-file path, and the verbatim
-  built-in `models.yaml` as the merge base (read at print time so it can't
-  drift from the shipped defaults).
+  `models.yaml` path + whether it exists, env-file path, installed pydantic-ai
+  version, which `*_API_KEY` env vars are set (names only — so agents never
+  read the secrets file to check), and the verbatim built-in `models.yaml` as
+  the merge base (read at print time so it can't drift from the shipped
+  defaults).
+- The doc states the closed worlds explicitly (per Opus field-testing): the
+  six model keys are the whole schema and unknown keys are silently ignored
+  (so agents don't invent `base_url:` and report false success), and the
+  provider set is fixed by pydantic-ai — with a static prefix list labeled by
+  version and links to pydantic-ai's raw-Markdown docs
+  (`https://pydantic.dev/docs/ai/models/<provider>/index.md`, `llms.txt`) as
+  the authoritative source. A live provider list was considered and rejected:
+  pydantic-ai's registry is an if/elif chain, so extraction would mean
+  regexing its source.
 - The doc deliberately tells agents to have the user add API keys themselves
   (after the config work is done) instead of asking for the key
   in-conversation, so keys don't end up in logs or provider training data.

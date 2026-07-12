@@ -39,6 +39,39 @@ aliases:
 
 A model with no special settings is just `<model-id>: {}`.
 
+The keys shown above are the **entire** per-model schema (plus
+`supports_subscription`, which only applies to gpt-5.x under
+`openai-responses` — see `oi auth openai`). Unknown keys are silently
+ignored, not rejected: an invented key like `base_url:` will merge cleanly,
+do nothing, and look like it worked. Base URLs are per-provider environment
+variables in pydantic-ai (`OPENAI_BASE_URL`, `OLLAMA_BASE_URL`, …), not
+models.yaml keys.
+
+## The provider set is closed
+
+A model can only be configured if pydantic-ai ships a provider for it. If a
+provider isn't in the list below, it **cannot** be added via config — that's
+a pydantic-ai code change, not a YAML edit. Don't guess a prefix and report
+success; an unknown provider fails at request time, not at config time.
+
+Chat providers as of pydantic-ai 2.9 (installed: $pydantic_ai_version):
+
+> alibaba, anthropic, azure, azure-responses, bedrock, cerebras, cohere,
+> deepseek, fireworks, github, google, google-cloud, groq, heroku,
+> huggingface, litellm, mistral, moonshotai, nebius, ollama, openai,
+> openai-chat, openai-responses, openrouter, ovhcloud, sambanova, together,
+> vercel, xai, zai
+
+For the authoritative current list, provider quirks, and model ids, use
+pydantic-ai's own docs — they serve raw Markdown, so they're cheap to fetch:
+
+- Index of all doc pages: https://pydantic.dev/docs/ai/llms.txt
+- Provider overview (includes the OpenAI-compatible providers):
+  https://pydantic.dev/docs/ai/models/overview/index.md
+- Major providers have their own page:
+  `https://pydantic.dev/docs/ai/models/<provider>/index.md`
+  (e.g. `.../models/xai/index.md`)
+
 ## pydantic-ai 2.x naming traps
 
 - Bare `openai:` routes to the **Responses API** in pydantic-ai 2.x; Chat
@@ -58,6 +91,12 @@ Each provider reads its standard environment variable: `OPENAI_API_KEY`,
 `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `XAI_API_KEY`,
 `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, and so on. Keys can also live in oi's env
 file, which overrides the inherited environment: `$env_file_path`
+
+Keys currently set (env file included; names only): $api_keys_present
+
+That line already reflects the env file — never read the file itself to
+check; it contains secrets. (`oi auth openai status` shows whether OpenAI
+subscription billing is active, which needs no key.)
 
 If the provider needs a key that isn't set yet, do NOT ask the user to paste
 it into the conversation — a key shared with an LLM may end up in logs or
