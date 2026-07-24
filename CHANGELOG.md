@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-24
+
 ### Added
 
 - `oi docs models`: LLM-agent-oriented documentation for adding models to the
@@ -26,6 +28,8 @@ config/`models.yaml` format, alias names).
 
 ### Changed
 
+- The `opus` alias now points to Claude Opus 5 (`claude-opus-5`), replacing
+  Claude Opus 4.8.
 - Upgraded to Pydantic AI 2.x (`pydantic-ai[groq,xai]>=2.9.0,<3.0`). oi's own
   code needed no changes — it builds on the `direct` API, so v2's rewrite of the
   `Agent` / harness layer doesn't touch it. The `groq` and `xai` extras are now
@@ -190,7 +194,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/dansclearov/oi/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/dansclearov/oi/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/dansclearov/oi/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/dansclearov/oi/compare/v0.1.2...v0.1.3
