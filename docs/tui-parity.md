@@ -35,7 +35,7 @@ UI. Update this file when a gap closes or a decision changes.
   navigate, Tab inserts the highlighted command, Esc closes (interrupts the
   stream only when the menu is closed). `/btw` streams its side answer under
   a hollow `○` marker (ephemeral = unsaved); `/bookmark` toggles as in the
-  CLI; `/vim` explains vim mode is classic-UI-only.
+  CLI; `/vim` toggles vim mode live and persists it.
 - **`Alt+V` image paste** on vision models inserts a literal `[Image #N]`
   marker into the input; on submit the markers are spliced back into
   multi-part content. Numbering restarts at 1 each turn and survivors
