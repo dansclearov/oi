@@ -9,6 +9,11 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The `gemini-flash` alias now points to Gemini 3.6 Flash (`gemini-3.6-flash`),
+  replacing Gemini 3.5 Flash.
+
 ## [0.1.6] - 2026-07-24
 
 ### Added
