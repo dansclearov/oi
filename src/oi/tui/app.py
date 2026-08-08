@@ -11,7 +11,10 @@ contextual hint line beneath it.
 import asyncio
 import re
 from dataclasses import replace
-from typing import Optional, Sequence, Union
+from typing import TYPE_CHECKING, Optional, Sequence, Union, cast
+
+if TYPE_CHECKING:
+    from textual.document._document import Document
 
 from pydantic_ai.messages import (
     BinaryContent,
@@ -185,7 +188,16 @@ class ChatInput(TextArea):
 
     Menu-related keys (Tab, Ctrl+N/P, Esc) are posted as `MenuKey` messages —
     the app decides what they mean based on whether the slash menu is open.
+
+    Pasted images live here as literal `[Image #N]` markers plus a pending
+    map. On every change the markers are reconciled — images whose marker was
+    mangled are dropped and survivors renumbered from 1 — so numbering is
+    always contiguous within the turn. Backspace/Delete treat a marker as one
+    unit (pill-like); `consume_content()` splices images in at submit and
+    resets for the next turn.
     """
+
+    _IMAGE_MARKER_RE = re.compile(r"\[Image #(\d+)\]")
 
     class Submitted(Message):
         def __init__(self, text: str) -> None:
@@ -216,6 +228,7 @@ class ChatInput(TextArea):
         # the painted cursor is hidden via CSS and must not blink in tests.
         self.cursor_blink = False
         self.vim: Optional[VimHandler] = None
+        self._images: dict[int, BinaryContent] = {}
 
     def set_vim_enabled(self, enabled: bool) -> None:
         if enabled and self.vim is None:
@@ -266,11 +279,103 @@ class ChatInput(TextArea):
             event.prevent_default()
             self.vim.handle_key(event)
             return
+        if event.key in ("backspace", "delete") and self._delete_marker_atomically(
+            before=event.key == "backspace"
+        ):
+            event.stop()
+            event.prevent_default()
+            return
         await super()._on_key(event)
 
     @property
     def text_before_cursor(self) -> str:
         return self.get_text_range((0, 0), self.cursor_location)
+
+    # ---------------------------------------------------------- image pills
+
+    def attach_image(self, content: BinaryContent) -> None:
+        """Register a pasted image and insert its marker at the cursor."""
+        self._reconcile_image_markers()
+        number = len(self._images) + 1
+        self._images[number] = content
+        self.insert(f"[Image #{number}] ")
+
+    def consume_content(self, text: str) -> UserContentInput:
+        """Splice pending images in at their markers; reset for the next turn."""
+        images = self._images
+        self._images = {}
+        if not images:
+            return text
+
+        parts: list[UserContent] = []
+        pos = 0
+        for match in self._IMAGE_MARKER_RE.finditer(text):
+            image = images.get(int(match.group(1)))
+            if image is None:
+                continue
+            if match.start() > pos:
+                parts.append(text[pos : match.start()])
+            parts.append(image)
+            pos = match.end()
+        if pos < len(text):
+            parts.append(text[pos:])
+
+        if not any(isinstance(part, BinaryContent) for part in parts):
+            return text
+        return parts
+
+    @on(TextArea.Changed)
+    def _on_self_changed(self) -> None:
+        self._reconcile_image_markers()
+
+    def _intact_markers(self) -> list[tuple[int, int, int]]:
+        """(start, end, number) spans of markers backed by a pending image."""
+        seen: set[int] = set()
+        spans = []
+        for match in self._IMAGE_MARKER_RE.finditer(self.text):
+            number = int(match.group(1))
+            if number in self._images and number not in seen:
+                seen.add(number)
+                spans.append((match.start(), match.end(), number))
+        return spans
+
+    def _reconcile_image_markers(self) -> None:
+        """Drop images whose marker was edited away; renumber the rest from 1.
+
+        Renumbering keeps `len(images) + 1` correct as the next paste number
+        and matches the scrollback UI, which renumbers pills on deletion.
+        """
+        if not self._images:
+            return
+        spans = self._intact_markers()
+        renames = [
+            (start, end, old, new)
+            for new, (start, end, old) in enumerate(spans, start=1)
+            if old != new
+        ]
+        self._images = {
+            new: self._images[old] for new, (_, _, old) in enumerate(spans, start=1)
+        }
+        for start, end, _, new in reversed(renames):
+            self.replace(
+                f"[Image #{new}]", self._marker_loc(start), self._marker_loc(end)
+            )
+
+    def _marker_loc(self, index: int):
+        return cast("Document", self.document).get_location_from_index(index)
+
+    def _delete_marker_atomically(self, *, before: bool) -> bool:
+        """Delete the whole `[Image #N]` marker at the cursor edge, if any."""
+        if not self._images or not self.selection.is_empty:
+            return False
+        document = cast("Document", self.document)
+        idx = document.get_index_from_location(self.cursor_location)
+        target = idx - 1 if before else idx
+        for start, end, _ in self._intact_markers():
+            if start <= target < end:
+                self.delete(self._marker_loc(start), self._marker_loc(end))
+                return True
+        return False
 
     def sync_height(self) -> None:
         """Grow with the (wrapped) content up to a cap, like a chat compose box.
@@ -397,8 +502,6 @@ class OiApp(App):
         Binding("alt+v", "paste_image", show=False),
     ]
 
-    _IMAGE_MARKER_RE = re.compile(r"\[Image #(\d+)\]")
-
     def __init__(
         self,
         current_chat: Chat,
@@ -415,8 +518,6 @@ class OiApp(App):
         self._active_view: Optional[ResponseView] = None
         self._turn_worker: Optional[Worker] = None
         self._capabilities: Optional[ModelCapabilities] = None
-        self._pending_images: dict[int, BinaryContent] = {}
-        self._image_counter = 0
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="log")
@@ -517,6 +618,11 @@ class OiApp(App):
         if self._turn_worker is not None and self._turn_worker.is_running:
             return
 
+        parsed_command = parse_local_command(text)
+        # Take the images before clearing the input (clearing reconciles the
+        # marker registry down to nothing).
+        content = None if parsed_command else input_widget.consume_content(text)
+
         # Clear the input and queue the echoed row without awaiting in
         # between, so both land in the same frame (no vanish-then-reappear).
         input_widget.clear()
@@ -524,13 +630,12 @@ class OiApp(App):
         input_widget.sync_height()
         self._mount_notice_nowait(USER_LABEL, text)
 
-        parsed_command = parse_local_command(text)
         if parsed_command is not None:
             command_name, command_args = parsed_command
             await self._handle_local_command(command_name, command_args)
             return
 
-        content = self._build_user_content(text)
+        assert content is not None
         self._turn_worker = self.run_worker(self._run_turn(content), exclusive=True)
         self._set_hint("esc to interrupt")
 
@@ -583,29 +688,6 @@ class OiApp(App):
                 await self._mount_notice(
                     INFO_LABEL, f"{action} chat: {self._chat.metadata.title}"
                 )
-
-    def _build_user_content(self, text: str) -> UserContentInput:
-        """Splice pending pasted images in at their `[Image #N]` markers."""
-        if not self._pending_images:
-            return text
-
-        parts: list[UserContent] = []
-        pos = 0
-        for match in self._IMAGE_MARKER_RE.finditer(text):
-            image = self._pending_images.get(int(match.group(1)))
-            if image is None:
-                continue
-            if match.start() > pos:
-                parts.append(text[pos : match.start()])
-            parts.append(image)
-            pos = match.end()
-        if pos < len(text):
-            parts.append(text[pos:])
-        self._pending_images.clear()
-
-        if not any(isinstance(part, BinaryContent) for part in parts):
-            return text
-        return parts
 
     @on(TextArea.Changed)
     async def _on_input_changed(self, event: TextArea.Changed) -> None:
@@ -734,12 +816,8 @@ class OiApp(App):
             await self._mount_notice(INFO_LABEL, "No image found in the clipboard.")
             return
         data, media_type = image
-        self._image_counter += 1
-        self._pending_images[self._image_counter] = BinaryContent(
-            data=data, media_type=media_type
-        )
         input_widget = self.query_one(ChatInput)
-        input_widget.insert(f"[Image #{self._image_counter}] ")
+        input_widget.attach_image(BinaryContent(data=data, media_type=media_type))
         input_widget.focus()
 
     def _persist_turn(self) -> None:

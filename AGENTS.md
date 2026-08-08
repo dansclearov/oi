@@ -306,9 +306,13 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   otherwise.
 - **Image paste**: `Alt+V` (app binding, no-op without `supports_vision`)
   reads the clipboard via `ui/image_paste.py:read_clipboard_image` in a
-  thread and inserts a literal `[Image #N]` marker; `_build_user_content`
-  splices pending `BinaryContent` back in at the markers on submit. No PUA
-  sentinels/pills in the TUI.
+  thread; `ChatInput` owns the images. `attach_image` inserts a literal
+  `[Image #N]` marker; a reconcile pass on every text change drops images
+  whose marker was edited away and renumbers survivors from 1 (numbering is
+  per turn — `consume_content()` splices `BinaryContent` in at submit and
+  resets). Backspace/Delete at a marker delete the whole marker (pill-like);
+  vim operators that cut into one just demote it to literal text and the
+  reconcile drops the image. No PUA sentinels in the TUI.
 - **Vim mode**: `tui/vim.py` — `VimHandler`, a modal key dispatcher over
   TextArea primitives (document index/location conversion, selection, edit
   methods, undo stack); motions/text objects are pure `(text, index)`

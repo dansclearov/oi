@@ -167,19 +167,53 @@ def test_btw_turn_streams_but_saves_nothing(tmp_path):
     asyncio.run(scenario())
 
 
-def test_build_user_content_splices_images(tmp_path):
+def test_consume_content_splices_images():
     from pydantic_ai.messages import BinaryContent
 
-    app = _make_app(tmp_path)[0]
+    chat_input = ChatInput()
     image = BinaryContent(data=b"png", media_type="image/png")
-    app._pending_images[1] = image
+    chat_input._images[1] = image
 
-    content = app._build_user_content("look at [Image #1] please")
+    content = chat_input.consume_content("look at [Image #1] please")
 
     assert content == ["look at ", image, " please"]
-    assert app._pending_images == {}
+    assert chat_input._images == {}
     # Markers with no pending image stay literal text.
-    assert app._build_user_content("[Image #9]") == "[Image #9]"
+    assert chat_input.consume_content("[Image #9]") == "[Image #9]"
+
+
+def test_image_markers_are_atomic_and_renumbered(tmp_path):
+    from pydantic_ai.messages import BinaryContent
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.focus()
+            await pilot.pause()
+
+            first = BinaryContent(data=b"a", media_type="image/png")
+            second = BinaryContent(data=b"b", media_type="image/png")
+            chat_input.attach_image(first)
+            chat_input.attach_image(second)
+            assert chat_input.text == "[Image #1] [Image #2] "
+
+            # Backspace inside a marker deletes the whole marker atomically.
+            chat_input.move_cursor((0, 15))  # inside "[Image #2]"
+            await pilot.press("backspace")
+            await pilot.pause()
+            # ...and the survivor keeps its number.
+            assert chat_input.text == "[Image #1]  "
+            assert chat_input._images == {1: first}
+
+            # Next paste reuses the freed number.
+            chat_input.attach_image(BinaryContent(data=b"c", media_type="image/png"))
+            assert "[Image #2]" in chat_input.text
+            assert sorted(chat_input._images) == [1, 2]
+            # Drain pending Changed messages while the widgets are mounted.
+            await pilot.pause()
+
+    asyncio.run(scenario())
 
 
 def test_interrupt_discards_pending_message(tmp_path):
