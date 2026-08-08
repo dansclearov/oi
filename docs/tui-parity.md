@@ -39,11 +39,11 @@ UI. Update this file when a gap closes or a decision changes.
 - **`Alt+V` image paste** on vision models inserts a literal `[Image #N]`
   marker into the input; on submit the markers are spliced back into
   multi-part content. Numbering restarts at 1 each turn and survivors
-  renumber when a marker is removed. Markers behave as **one character**:
-  Backspace/Delete take them whole, and under vim the cursor never lands
-  inside one — `h`/`l` step over it, `x`/`s`/`r` take it whole, and any
-  operator range that clips one expands to cover it. Only typing *inside* a
-  marker in insert mode still demotes it to plain text (dropping the image).
+  renumber when a marker is removed. Markers behave as **one character** in
+  every mode: the cursor can never rest inside one (arrows, Home/End, mouse,
+  and vim motions all snap past it), Backspace/Delete take them whole, and
+  vim's `x`/`s`/`r` plus any operator range that clips one expand to cover
+  it. This matches the scrollback UI's sentinel pills.
 - **Visual selection is nvim-style**: a solid background with the text's own
   foreground left intact, so it reads as a layer over the text. Textual's
   ansi theme defaults to `text-style: reverse`, which swaps fg/bg and made

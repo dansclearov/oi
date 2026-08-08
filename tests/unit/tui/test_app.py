@@ -182,6 +182,41 @@ def test_consume_content_splices_images():
     assert chat_input.consume_content("[Image #9]") == "[Image #9]"
 
 
+def test_cursor_cannot_rest_inside_a_marker(tmp_path):
+    from pydantic_ai.messages import BinaryContent
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.focus()
+            await pilot.pause()
+            chat_input.insert("hi ")
+            chat_input.attach_image(BinaryContent(data=b"x", media_type="image/png"))
+            await pilot.pause()
+            assert chat_input.text == "hi [Image #1] "
+
+            # Arrowing left from the end steps over the marker in one go.
+            chat_input.move_cursor((0, 13))
+            await pilot.press("left")
+            assert chat_input.cursor_location == (0, 3)
+
+            # Arrowing right from before it clears it entirely.
+            await pilot.press("right")
+            assert chat_input.cursor_location == (0, 13)
+
+            # Typing can never land inside the marker, so it stays intact.
+            chat_input.move_cursor((0, 7))  # dropped in the middle
+            await pilot.pause()
+            assert chat_input.cursor_location in ((0, 3), (0, 13))
+            await pilot.press("Z")
+            await pilot.pause()
+            assert "[Image #1]" in chat_input.text
+            assert chat_input._images != {}
+
+    asyncio.run(scenario())
+
+
 def test_image_markers_are_atomic_and_renumbered(tmp_path):
     from pydantic_ai.messages import BinaryContent
 
@@ -198,8 +233,8 @@ def test_image_markers_are_atomic_and_renumbered(tmp_path):
             chat_input.attach_image(second)
             assert chat_input.text == "[Image #1] [Image #2] "
 
-            # Backspace inside a marker deletes the whole marker atomically.
-            chat_input.move_cursor((0, 15))  # inside "[Image #2]"
+            # Backspace at a marker's trailing edge deletes it atomically.
+            chat_input.move_cursor((0, 21))  # just after "[Image #2]"
             await pilot.press("backspace")
             await pilot.pause()
             # ...and the survivor keeps its number.

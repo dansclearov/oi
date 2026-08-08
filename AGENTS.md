@@ -310,11 +310,14 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   `[Image #N]` marker; a reconcile pass on every text change drops images
   whose marker was edited away and renumbers survivors from 1 (numbering is
   per turn — `consume_content()` splices `BinaryContent` in at submit and
-  resets). Markers are atomic: Backspace/Delete remove one whole, and
-  `ChatInput` hands `VimHandler` an `atom_spans` callback so vim treats them
-  as single characters (cursor snaps out of them, `_expand_range` grows any
-  clipping edit to cover them). `vim.py` stays image-agnostic — it only knows
-  "atoms". No PUA sentinels in the TUI.
+  resets). Markers are atomic in every mode: `_watch_selection` snaps the
+  cursor out of a marker (so arrows/Home/End/mouse and typing can't land
+  inside — guard it with `getattr`, the reactive fires during
+  `TextArea.__init__`), Backspace/Delete remove one whole, and `ChatInput`
+  hands `VimHandler` an `atom_spans` callback so vim treats them as single
+  characters (`_expand_range` grows any clipping edit to cover them).
+  `vim.py` stays image-agnostic — it only knows "atoms". No PUA sentinels in
+  the TUI.
 - **Vim mode**: `tui/vim.py` — `VimHandler`, a modal key dispatcher over
   TextArea primitives (document index/location conversion, selection, edit
   methods, undo stack); motions/text objects are pure `(text, index)`

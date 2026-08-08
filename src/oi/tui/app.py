@@ -30,6 +30,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Markdown, Static, TextArea
+from textual.widgets.text_area import Selection
 from textual.widgets._markdown import MarkdownStream
 from textual.worker import Worker
 
@@ -331,6 +332,60 @@ class ChatInput(TextArea):
     @on(TextArea.Changed)
     def _on_self_changed(self) -> None:
         self._reconcile_image_markers()
+
+    def _watch_selection(
+        self, previous_selection: Selection, selection: Selection
+    ) -> None:
+        super()._watch_selection(previous_selection, selection)
+        # Keep the cursor out of the middle of a marker in every mode (arrows,
+        # Home/End, mouse) — the scrollback UI gets this for free from its
+        # one-character sentinel pills. Re-entering the watcher is safe: the
+        # snapped position is outside every marker, so it settles at once.
+        # (getattr: the reactive fires during TextArea.__init__, before ours.)
+        if not getattr(self, "_images", None):
+            return
+        snapped = self._snap_selection(previous_selection, selection)
+        if snapped != selection:
+            self.selection = snapped
+
+    def _snap_selection(
+        self, previous_selection: Selection, selection: Selection
+    ) -> Selection:
+        document = cast("Document", self.document)
+        spans = [(start, end) for start, end, _ in self._intact_markers()]
+        if not spans:
+            return selection
+
+        start_idx = document.get_index_from_location(selection.start)
+        end_idx = document.get_index_from_location(selection.end)
+        previous_idx = document.get_index_from_location(previous_selection.end)
+
+        new_end = self._snap_index(end_idx, previous_idx, spans)
+        if selection.is_empty:
+            new_start = new_end
+        else:
+            # Anchor snaps outward so a drag covers whole markers.
+            new_start = self._snap_index(
+                start_idx, end_idx if start_idx < end_idx else -1, spans
+            )
+        if (new_start, new_end) == (start_idx, end_idx):
+            return selection
+        return Selection(
+            document.get_location_from_index(new_start),
+            document.get_location_from_index(new_end),
+        )
+
+    @staticmethod
+    def _snap_index(idx: int, coming_from: int, spans: list[tuple[int, int]]) -> int:
+        """Move idx to the nearer edge of any marker it landed inside."""
+        for start, end in spans:
+            if start < idx < end:
+                if coming_from <= start:
+                    return end
+                if coming_from >= end:
+                    return start
+                return start if idx - start < end - idx else end
+        return idx
 
     def _intact_markers(self) -> list[tuple[int, int, int]]:
         """(start, end, number) spans of markers backed by a pending image."""
