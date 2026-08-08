@@ -583,6 +583,8 @@ class OiApp(App):
         self._model_registry = registry
         self._is_new_chat = is_new_chat
         self._active_view: Optional[ResponseView] = None
+        self._response_active = False
+        self._response_label: Optional[str] = None
         self._turn_worker: Optional[Worker] = None
         self._capabilities: Optional[ModelCapabilities] = None
 
@@ -898,25 +900,36 @@ class OiApp(App):
     # --- renderer message handlers --------------------------------------
 
     @on(ResponseStarted)
-    async def _on_response_started(self, message: ResponseStarted) -> None:
-        view = ResponseView()
-        self._active_view = view
-        await self._chat_log.mount(_row(AI_LABEL, view, label_text=message.label_text))
+    def _on_response_started(self, message: ResponseStarted) -> None:
+        # Don't mount anything yet: the marker appears with the first piece of
+        # output, not at submit time (the request is still in flight here).
+        self._response_active = True
+        self._response_label = message.label_text
+        self._active_view = None
+
+    async def _ensure_response_view(self) -> ResponseView:
+        if self._active_view is None:
+            view = ResponseView()
+            self._active_view = view
+            await self._chat_log.mount(
+                _row(AI_LABEL, view, label_text=self._response_label)
+            )
+        return self._active_view
 
     @on(TextDelta)
     async def _on_text_delta(self, message: TextDelta) -> None:
-        if self._active_view is not None:
-            await self._active_view.write_text(message.text)
+        if self._response_active:
+            await (await self._ensure_response_view()).write_text(message.text)
 
     @on(ThinkingDelta)
     async def _on_thinking_delta(self, message: ThinkingDelta) -> None:
-        if self._active_view is not None:
-            await self._active_view.append_thinking(message.text)
+        if self._response_active:
+            await (await self._ensure_response_view()).append_thinking(message.text)
 
     @on(ToolLine)
     async def _on_tool_line(self, message: ToolLine) -> None:
-        if self._active_view is not None:
-            await self._active_view.add_tool_line(message.text)
+        if self._response_active:
+            await (await self._ensure_response_view()).add_tool_line(message.text)
 
     @on(Notice)
     async def _on_notice(self, message: Notice) -> None:
@@ -925,9 +938,14 @@ class OiApp(App):
     @on(TurnFinished)
     async def _on_turn_finished(self, message: TurnFinished) -> None:
         self._set_hint("")
+        self._response_active = False
+        if message.interrupted and self._active_view is None:
+            # Interrupted before any output arrived: still show it was cancelled.
+            await self._ensure_response_view()
         if self._active_view is not None:
             await self._active_view.finalize(interrupted=message.interrupted)
             self._active_view = None
+        self._response_label = None
 
     # --- actions ---------------------------------------------------------
 

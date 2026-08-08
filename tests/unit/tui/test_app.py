@@ -96,6 +96,52 @@ def test_submitted_turn_streams_markdown_and_saves(tmp_path):
     asyncio.run(scenario())
 
 
+def test_assistant_marker_waits_for_the_first_output(tmp_path):
+    """The ● row appears with the response, not at submit (CC behavior)."""
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def slow_chat_async(
+            messages,
+            model_name_or_alias,
+            options=None,
+            *,
+            capabilities_override=None,
+            renderer_factory=None,
+        ):
+            assert renderer_factory is not None
+            renderer = renderer_factory(ctx.llm_client.capabilities, options)
+            renderer.start_response()  # request in flight, no output yet
+            started.set()
+            await release.wait()
+            renderer.render_text("here it is")
+            renderer.finish_response()
+            return ModelResponse(parts=[TextPart(content="here it is")])
+
+        ctx.llm_client.chat_async = slow_chat_async
+
+        async with app.run_test() as pilot:
+            app.query_one(ChatInput).insert("hello")
+            await pilot.press("enter")
+            await asyncio.wait_for(started.wait(), timeout=5)
+            await pilot.pause()
+            await pilot.pause()
+
+            assert not list(app.query(ResponseView)), "marker shown before output"
+
+            release.set()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.pause()
+
+            assert list(app.query(ResponseView)), "marker missing after output"
+
+    asyncio.run(scenario())
+
+
 def test_slash_command_is_not_sent_to_model(tmp_path):
     async def scenario():
         app, chat, ctx = _make_app(tmp_path)
