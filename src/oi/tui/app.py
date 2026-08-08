@@ -456,9 +456,19 @@ class ChatInput(TextArea):
         region; Textual only refreshes `app.cursor_position` when the
         selection, scroll, or focus changes, which would leave the hardware
         cursor on the row the input used to occupy (its border).
+
+        `cursor_position` is a plain attribute that is only written to the
+        terminal while rendering a compositor update, so the repaint is what
+        actually moves the visible cursor — without it the value is right but
+        the cursor doesn't budge until the next keystroke repaints.
         """
-        if self.has_focus:
-            self.app.cursor_position = self.cursor_screen_offset
+        if not self.has_focus:
+            return
+        offset = self.cursor_screen_offset
+        if self.app.cursor_position == offset:
+            return
+        self.app.cursor_position = offset
+        self.refresh()
 
     def on_resize(self, event) -> None:
         self.sync_height()
