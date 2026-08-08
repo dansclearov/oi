@@ -21,7 +21,9 @@ config/`models.yaml` format, alias names).
   completion menu (type `/`; Ctrl+N/P to navigate, Tab to complete), `Alt+V`
   image paste is supported on vision models, and vim mode has its own modal
   emulation (normal/visual/visual-line, counts, `d c y` operators with
-  motions and text objects, `f/t` finds, paste register, undo/redo).
+  motions and text objects, `f/t` finds, paste register, undo/redo). The
+  input cursor is the terminal's own — steady, never blinking, bar-shaped in
+  insert and block in normal/visual.
 
 ### Changed
 

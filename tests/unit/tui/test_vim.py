@@ -173,3 +173,41 @@ def test_counts_and_dollar():
 
 def test_normal_mode_blocks_typing():
     _drive("abc", ["escape", "0", "z", "q"], "abc", Mode.NORMAL)
+
+
+def test_mode_changes_are_reported():
+    async def scenario():
+        from textual import on
+        from textual.app import App
+
+        from oi.tui.app import ChatInput
+
+        seen: list[Mode] = []
+
+        class Harness(App):
+            def compose(self):
+                yield ChatInput()
+
+            @on(ChatInput.MenuKey)
+            def _on_menu_key(self, message: ChatInput.MenuKey) -> None:
+                if message.action == "dismiss":
+                    self.query_one(ChatInput).vim_escape()
+
+            @on(ChatInput.VimModeChanged)
+            def _on_mode(self, message: ChatInput.VimModeChanged) -> None:
+                seen.append(message.mode)
+
+        app = Harness()
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.set_vim_enabled(True)
+            chat_input.insert("abc")
+            chat_input.focus()
+            await pilot.pause()
+            for key in ["escape", "v", "escape", "i"]:
+                await pilot.press(key)
+            await pilot.pause()
+
+        assert seen == [Mode.NORMAL, Mode.VISUAL, Mode.NORMAL, Mode.INSERT]
+
+    asyncio.run(scenario())

@@ -204,16 +204,30 @@ class ChatInput(TextArea):
         "escape": "dismiss",
     }
 
+    class VimModeChanged(Message):
+        def __init__(self, mode: VimMode) -> None:
+            super().__init__()
+            self.mode = mode
+
     def __init__(self) -> None:
         super().__init__()
         self.show_line_numbers = False
+        # The hardware terminal cursor is used instead (steady, mode-shaped);
+        # the painted cursor is hidden via CSS and must not blink in tests.
+        self.cursor_blink = False
         self.vim: Optional[VimHandler] = None
 
     def set_vim_enabled(self, enabled: bool) -> None:
         if enabled and self.vim is None:
-            self.vim = VimHandler(self)
-        elif not enabled:
+            self.vim = VimHandler(
+                self,
+                on_mode_change=lambda mode: self.post_message(
+                    self.VimModeChanged(mode)
+                ),
+            )
+        elif not enabled and self.vim is not None:
             self.vim = None
+            self.post_message(self.VimModeChanged(VimMode.INSERT))
 
     def vim_reset(self) -> None:
         """Back to insert mode for the next message (like a fresh prompt)."""
@@ -361,6 +375,13 @@ class OiApp(App):
         border: none;
         background: transparent;
     }
+    /* The visible cursor is the terminal's own (shaped via DECSCUSR); hide
+       the painted cell cursor so there aren't two. */
+    ChatInput .text-area--cursor {
+        text-style: none !important;
+        color: ansi_default !important;
+        background: transparent !important;
+    }
     #hint {
         height: 1;
         padding: 0 2;
@@ -416,6 +437,19 @@ class OiApp(App):
         input_widget.set_vim_enabled(self._ctx.config.vim_mode)
         input_widget.sync_height()
         input_widget.focus()
+        # Show the terminal's own cursor (Textual keeps it positioned at the
+        # TextArea cursor for IME); steady bar to start — insert mode.
+        self._write_terminal("\x1b[?25h\x1b[6 q")
+
+    def _write_terminal(self, sequence: str) -> None:
+        if self._driver is not None and not self.is_headless:
+            self._driver.write(sequence)
+
+    @on(ChatInput.VimModeChanged)
+    def _on_vim_mode_changed(self, message: ChatInput.VimModeChanged) -> None:
+        # Steady bar in insert, steady block otherwise (vim-style, no blink).
+        bar = message.mode is VimMode.INSERT
+        self._write_terminal("\x1b[6 q" if bar else "\x1b[2 q")
 
     def _set_hint(self, text: str) -> None:
         self.query_one("#hint", Static).update(Text(text))
@@ -770,6 +804,8 @@ class OiApp(App):
         # (save_chat bumps updated_at and skips empty chats itself).
         if not self._ctx.ephemeral:
             self._ctx.chat_manager.save_chat(self._chat)
+        # DECSCUSR shape outlives the app; restore the terminal default.
+        self._write_terminal("\x1b[0 q")
         self.exit()
 
     def action_scroll_log_up(self) -> None:

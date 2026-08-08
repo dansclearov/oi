@@ -318,6 +318,15 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   interrupt-stream. `/vim` toggles it live and persists via
   `update_user_config`; submit resets to insert mode. There is deliberately
   no mode indicator.
+- **Cursor**: the input uses the terminal's hardware cursor, not the painted
+  cell (which is hidden via `!important` CSS on `.text-area--cursor`).
+  Textual already keeps `app.cursor_position` at the TextArea cursor (IME
+  support) and moves the terminal cursor there after every frame inside the
+  synchronized update, so `OiApp` just shows it (`?25h`) and shapes it via
+  DECSCUSR on `ChatInput.VimModeChanged`: steady bar (`6 q`) in insert,
+  steady block (`2 q`) otherwise, `0 q` reset on exit. Writes go through
+  `_write_terminal`, which no-ops headless — screenshots/tests show no
+  cursor, that's expected.
 - Gotchas: don't name `OiApp` attributes `_registry` or `_log` (Textual
   App/DOMNode internals). Textual is pinned `>=8.2.8,<9` (fast-moving
   majors).

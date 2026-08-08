@@ -48,6 +48,11 @@ UI. Update this file when a gap closes or a decision changes.
   internal register); `u`/`Ctrl+R`. No mode indicator by choice. Not
   implemented: `.` repeat, macros, marks, named registers, `>>`/`<<`, `ip`.
   Esc precedence: close slash menu → leave insert/visual → interrupt stream.
+- **The cursor is the terminal's own**, not Textual's painted cell: Textual
+  keeps the (hidden) hardware cursor positioned at the TextArea cursor for
+  IME, so we show it and shape it via DECSCUSR — steady bar in insert,
+  steady block in normal/visual, no blinking (vim-style); reset to the
+  terminal default on exit.
 
 ## Parity gaps vs the scrollback UI
 

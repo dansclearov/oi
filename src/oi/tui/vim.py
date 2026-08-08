@@ -14,7 +14,7 @@ motions with counts; `f F t T ; ,` finds; `i a I A o O` insert entries;
 """
 
 from enum import Enum
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Callable, Optional, cast
 
 if TYPE_CHECKING:
     from textual.document._document import Document
@@ -229,9 +229,14 @@ def object_range(
 class VimHandler:
     """Per-input modal state machine; the ChatInput delegates keys here."""
 
-    def __init__(self, text_area: "TextArea") -> None:
+    def __init__(
+        self,
+        text_area: "TextArea",
+        on_mode_change: Optional[Callable[[Mode], None]] = None,
+    ) -> None:
         self.ta = text_area
-        self.mode = Mode.INSERT
+        self._mode = Mode.INSERT
+        self.on_mode_change = on_mode_change
         self._count = ""
         self._operator: Optional[str] = None
         self._pending: Optional[str] = (
@@ -242,6 +247,17 @@ class VimHandler:
         self._last_find: Optional[tuple[str, str]] = None
 
     # ------------------------------------------------------------- plumbing
+
+    @property
+    def mode(self) -> Mode:
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: Mode) -> None:
+        changed = value is not self._mode
+        self._mode = value
+        if changed and self.on_mode_change is not None:
+            self.on_mode_change(value)
 
     @property
     def _text(self) -> str:
