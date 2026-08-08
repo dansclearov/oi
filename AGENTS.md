@@ -119,6 +119,9 @@ src/oi/
 │   ├── labels.py      # Shared ANSI/Rich/prompt-toolkit label styling
 │   ├── transcript.py  # Shared plaintext/styled/search views of a chat (selector)
 │   └── stats_view.py  # Rich rendering for `oi stats` (heatmap, bars)
+├── tui/               # Full-screen TUI frontend (Textual), `tui` config knob
+│   ├── app.py         # OiApp - chat screen, turn worker, message handlers
+│   └── renderer.py    # TuiRenderer - ResponseRenderer → Textual messages
 ├── llm_types.py       # Shared chat/model capability dataclasses
 ├── app.py             # Main application orchestration + ChatLoopContext
 ├── cli.py             # Command-line argument parsing
@@ -245,8 +248,63 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - **Exhaustion → auto-fallback + auto-revert**: the Codex backend returns `x-codex-{primary,secondary}-used-percent` / `-reset-at` headers on every response (primary ~5h, secondary ~7d window; exhausted == used-percent 100). A `response` hook (`record_rate_limit_headers`) snapshots them; `is_exhausted()` is true while a window is maxed before its `reset_at`. While exhausted, routing uses the API key; if a turn hits the limit mid-request, `_stream_with_fallback` retries that turn on the API key in-place (gated on `is_exhausted()` set by the hook — never error-body guessing). After `reset_at` it auto-returns to the subscription; both transitions print a one-line notice.
 - **Billing indicator**: `app._billing_tag()` shows ` (sub)`/` (api)` on the chat-start banner — `(sub)` only when actually billing to the subscription, `(api)` otherwise (including non-subscription providers).
 
+**TUI Mode (`src/oi/tui/`, off by default):**
+- Enabled per run with `--tui` or persistently via `"tui": true` in
+  `config.json` (`Config.tui`). `main()` branches to `tui.app:run_tui` for the
+  interactive chat path only — headless (`-p`), `stats`, `docs`, `auth`, and
+  the pre-launch chat selector are unchanged. The import is deferred so the
+  scrollback path never pays for textual.
+- The win over scrollback: assistant text renders as **live-streamed markdown**
+  via Textual's `Markdown.get_stream()` (`MarkdownStream` buffers tokens and
+  re-parses only the final open block). Streaming re-render is impossible in
+  scrollback (Rich `Live` clobbers content taller than the screen), which is
+  why the classic UI streams plain text.
+- **Turn flow**: `ChatInput` (TextArea subclass; Enter submits,
+  Shift+Enter/Ctrl+J newline) → async worker runs `LLMClient.chat_async` with
+  a `TuiRenderer` injected via `renderer_factory`. The renderer's sync hooks
+  post Textual messages (`TextDelta`, `ThinkingDelta`, …); the app's async
+  handlers mount widgets and feed the stream — the FIFO message queue
+  preserves delta order. The worker posts `TurnFinished` after `chat_async`
+  returns (all paths), which stops the stream; on cancellation it discards the
+  pending user message first (Ctrl+C parity with the CLI loop).
+- **Flicker discipline**: the submit path queues the input-clear and the
+  echoed row without awaiting between them (one frame, no vanish/reappear —
+  don't reintroduce `batch_update` there), and `ChatInput.sync_height` writes
+  `styles.height` only when the value changes because height is a
+  layout-invalidating property (a write per keystroke relayouts the screen).
+- **Interrupt = worker cancellation**: Ctrl+C (priority binding) cancels the
+  turn worker when streaming, else touches+exits. `chat_async` maps
+  `CancelledError` to mark-interrupted + finalize before re-raising.
+- Post-turn save + smart titling run in `asyncio.to_thread` — `LLMClient.chat`
+  (sync) is called there for titles, which is why its SIGINT handler installs
+  only on the main thread.
+- **Look**: Claude-Code-style, TUI-only (the scrollback UI keeps its labels).
+  Marker glyphs instead of role labels — `LABEL_MARKERS` maps `ui/labels.py`
+  labels to `❯` (user, dim in history) / `●` (assistant, default foreground) /
+  `✱` (system prompt, shown only when non-empty); info/warning/error have NO
+  marker and render as bare dim/yellow/red text lines (`_notice_widget`) —
+  plus a dim one-line header (`oi · model (sub|api) · …`) instead of the
+  banner. The input is pinned at the bottom with top/bottom border rules only
+  (no side borders/padding, so its `❯` — full brightness — column-aligns with
+  the history markers) and a 1-row hint line below it (`esc to interrupt`
+  while streaming, empty when idle — fixed height so it never shifts layout).
+  `ansi-dark` theme +
+  `ansi_*`/`ansi_default` CSS colors keep the terminal palette. Thinking
+  stays plain grey-italic text (a `Static`, not markdown). The log is a
+  fixed-height (`1fr`) `VerticalScroll` with `anchor()`: v8's compositor
+  bottom-aligns anchored content even when it's shorter than the container
+  (negative scroll), so the conversation hugs the input chat-app-style —
+  deliberate; user scroll releases the anchor.
+- Gotchas: don't name `OiApp` attributes `_registry` or `_log` (Textual
+  App/DOMNode internals). Local slash commands and Alt+V image paste are not
+  wired up in TUI mode yet; slash input is rejected with a warning so it never
+  reaches the model. Textual is pinned `>=8.2.8,<9` (fast-moving majors).
+- Tests drive the app headlessly via `app.run_test()` + a fake client
+  (`tests/unit/tui/test_app.py`); `app.export_screenshot()` renders an SVG if
+  you need to eyeball layout.
+
 **Streaming & Output:**
-- `StyledRenderer` is the only renderer — provides styled thinking traces (NOT markdown rendering!)
+- `StyledRenderer` is the scrollback renderer — styled thinking traces, NOT markdown rendering (markdown is TUI-only); `ResponseHandler` accepts an injected renderer (the TUI passes `TuiRenderer` via `chat_async`'s `renderer_factory`)
 - Shared label/color definitions live in `ui/labels.py` and are reused by plain prints, Rich output, and the prompt label
 - Rich console with `highlight=False` to prevent number styling in LLM output
 - Real-time streaming with interrupt handling

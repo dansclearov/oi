@@ -70,3 +70,4 @@ class Config:
     vim_mode: bool = field(
         default_factory=lambda: load_user_config().get("vim_mode", False)
     )
+    tui: bool = field(default_factory=lambda: load_user_config().get("tui", False))

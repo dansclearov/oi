@@ -414,11 +414,11 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
                     capabilities_override=capabilities_override,
                 )
             except KeyboardInterrupt:
-                _discard_pending_user_message(current_chat)
+                current_chat.discard_pending_user_message()
                 pending_user_message = False
                 raise
             except Exception as exc:
-                _discard_pending_user_message(current_chat)
+                current_chat.discard_pending_user_message()
                 pending_user_message = False
                 is_idle = True
                 print(
@@ -445,7 +445,7 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
         except KeyboardInterrupt:
             if not is_idle:
                 if pending_user_message:
-                    _discard_pending_user_message(current_chat)
+                    current_chat.discard_pending_user_message()
                 is_idle = True
                 print("", flush=True)
             else:
@@ -515,15 +515,6 @@ def run_headless_turn(
     _update_title_from_first_user_message(current_chat)
     ctx.chat_manager.save_chat(current_chat)
     _maybe_generate_smart_title(current_chat, ctx.chat_manager, ctx.llm_client)
-
-
-def _discard_pending_user_message(current_chat: Chat) -> None:
-    """Drop a trailing user request when generation fails or is interrupted."""
-    if not current_chat.messages:
-        return
-
-    if isinstance(current_chat.messages[-1], ModelRequest):
-        current_chat.messages.pop()
 
 
 def run_stats(args) -> None:
@@ -678,6 +669,13 @@ def main():
                     f"(ignoring --model {args.model})",
                 )
             )
+
+    if args.tui or ctx.config.tui:
+        # Deferred import: the TUI (and textual) shouldn't tax the other paths.
+        from oi.tui.app import run_tui
+
+        run_tui(current_chat, ctx, registry, is_new_chat)
+        return
 
     # Show continuation message for existing chats
     if not is_new_chat:

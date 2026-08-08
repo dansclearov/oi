@@ -1,0 +1,177 @@
+"""Pilot-driven tests for the TUI frontend."""
+
+import asyncio
+from unittest.mock import Mock
+
+from pydantic_ai.messages import ModelResponse, TextPart
+from textual.widgets import Markdown
+
+from oi.app import ChatLoopContext
+from oi.config.settings import Config
+from oi.core.chat_manager import ChatManager
+from oi.llm_types import ChatOptions, ModelCapabilities
+from oi.tui.app import ChatInput, OiApp, ResponseView
+from oi.tui.renderer import ResponseStarted, TextDelta, ThinkingDelta, TuiRenderer
+
+RESPONSE_MD = "# Title\n\nHello **world**\n\n- one\n- two"
+
+
+class FakeLLMClient:
+    """Streams a canned markdown response through the injected renderer."""
+
+    def __init__(self, capabilities: ModelCapabilities):
+        self.capabilities = capabilities
+        self.registry = Mock()
+        self.registry.get_provider_for_model.return_value = ("anthropic", "claude-x")
+        self.registry.get_model_capabilities.return_value = capabilities
+        self.calls = 0
+
+    def resolve_capabilities(self, model_name, capabilities_override=None):
+        return self.capabilities
+
+    async def chat_async(
+        self,
+        messages,
+        model_name_or_alias,
+        options=None,
+        *,
+        capabilities_override=None,
+        renderer_factory=None,
+    ):
+        self.calls += 1
+        assert renderer_factory is not None
+        renderer = renderer_factory(self.capabilities, options)
+        renderer.start_response()
+        renderer.render_thinking("pondering...")
+        for chunk in (RESPONSE_MD[:10], RESPONSE_MD[10:]):
+            renderer.render_text(chunk)
+        renderer.finish_response()
+        return ModelResponse(parts=[TextPart(content=RESPONSE_MD)])
+
+
+def _make_app(tmp_path, capabilities=None):
+    capabilities = capabilities or ModelCapabilities(supports_thinking=True)
+    config = Config(chat_dir=str(tmp_path / "chats"))
+    chat_manager = ChatManager(config)
+    llm_client = FakeLLMClient(capabilities)
+    chat = chat_manager.create_new_chat("test-model", "test prompt")
+    chat.metadata.set_model_capabilities_snapshot(capabilities)
+    ctx = ChatLoopContext(
+        config=config,
+        chat_manager=chat_manager,
+        llm_client=llm_client,  # type: ignore[arg-type]
+        input_handler=Mock(),
+        chat_options=ChatOptions(),
+        prompt_str="test prompt",
+        active_model="test-model",
+    )
+    return OiApp(chat, ctx, llm_client.registry, is_new_chat=True), chat, ctx
+
+
+def test_submitted_turn_streams_markdown_and_saves(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.insert("hello there")
+            await pilot.press("enter")
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+            # Let the worker's queued renderer/finish messages be processed.
+            await pilot.pause()
+            await pilot.pause()
+
+            markdown = app.query_one(ResponseView).query_one(Markdown)
+            assert markdown.source == RESPONSE_MD
+            thinking = app.query_one(".thinking")
+            assert "pondering" in str(thinking.render())
+            assert chat_input.text == ""
+
+        assert ctx.llm_client.calls == 1
+        assert len(chat.messages) == 2  # request (system+user) + response
+        saved = ctx.chat_manager.get_last_chat()
+        assert saved is not None
+        assert saved.metadata.title == "hello there"
+
+    asyncio.run(scenario())
+
+
+def test_slash_command_is_not_sent_to_model(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            app.query_one(ChatInput).insert("/vim")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            warnings = app.query(".warning-label")
+            assert list(warnings), "expected a warning notice for local commands"
+
+        assert ctx.llm_client.calls == 0
+        assert chat.messages == []
+
+    asyncio.run(scenario())
+
+
+def test_interrupt_discards_pending_message(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        started = asyncio.Event()
+
+        async def hanging_chat_async(
+            messages,
+            model_name_or_alias,
+            options=None,
+            *,
+            capabilities_override=None,
+            renderer_factory=None,
+        ):
+            assert renderer_factory is not None
+            renderer = renderer_factory(ctx.llm_client.capabilities, options)
+            renderer.start_response()
+            renderer.render_text("partial answer")
+            started.set()
+            await asyncio.Event().wait()  # streams forever until cancelled
+
+        ctx.llm_client.chat_async = hanging_chat_async
+
+        async with app.run_test() as pilot:
+            app.query_one(ChatInput).insert("hello")
+            await pilot.press("enter")
+            await asyncio.wait_for(started.wait(), timeout=5)
+            await pilot.pause()
+
+            await pilot.press("ctrl+c")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.pause()
+
+            assert list(app.query(".interrupted")), "expected [interrupted] marker"
+
+        assert chat.messages == []  # pending user message discarded
+        # The unsent system prompt is restored for the next attempt.
+        assert chat.pending_system_prompt == "test prompt"
+
+    asyncio.run(scenario())
+
+
+def test_renderer_posts_deltas_in_order():
+    posted = []
+    renderer = TuiRenderer(
+        ModelCapabilities(supports_thinking=True),
+        ChatOptions(),
+        lambda message: posted.append(message) or True,
+    )
+    renderer.start_response()
+    renderer.render_thinking("hmm")
+    renderer.render_text("part one, ")
+    renderer.render_text("part two")
+    renderer.finish_response()
+
+    assert isinstance(posted[0], ResponseStarted)
+    assert isinstance(posted[1], ThinkingDelta)
+    assert [m.text for m in posted if isinstance(m, TextDelta)] == [
+        "part one, ",
+        "part two",
+    ]
+    assert renderer.get_full_response() == "part one, part two"

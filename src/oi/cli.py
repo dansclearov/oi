@@ -105,6 +105,12 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         action="store_true",
         help="Keep thinking on but don't display the traces",
     )
+    behavior.add_argument(
+        "--tui",
+        action="store_true",
+        help='Run the full-screen TUI with rendered markdown ("tui": true in '
+        "config.json makes it the default)",
+    )
 
     other = parser.add_argument_group("other")
     other.add_argument(

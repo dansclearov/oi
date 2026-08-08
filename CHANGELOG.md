@@ -9,10 +9,27 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- Full-screen TUI mode (built on Textual) that renders responses as
+  live-streamed markdown — tables, syntax-highlighted code fences, lists —
+  in the terminal's own ANSI palette, with a Claude-Code-style presentation:
+  marker glyphs instead of role labels, a dim one-line session header, and a
+  bordered input pinned at the bottom with a contextual hint line. Opt in per
+  run with `--tui` or by default with `"tui": true` in `config.json`; the
+  classic scrollback UI remains the default. Local slash commands and image
+  paste aren't available in TUI mode yet.
+
 ### Changed
 
 - The `gemini-flash` alias now points to Gemini 3.6 Flash (`gemini-3.6-flash`),
   replacing Gemini 3.5 Flash.
+
+### Fixed
+
+- Interrupting or failing the first turn of a new chat no longer loses the
+  system prompt: discarding the pending user message now restores the prompt,
+  so the next message carries it again.
 
 ## [0.1.6] - 2026-07-24
 
