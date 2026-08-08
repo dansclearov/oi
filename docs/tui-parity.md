@@ -30,22 +30,30 @@ UI. Update this file when a gap closes or a decision changes.
   tight.
 - **Thinking stays first-class** grey-italic streamed text — no CC-style
   "Pondering…" filler marker.
+- **Slash commands work with a CC-style menu**: typing `/` opens a filtered
+  command list above the input (name + description columns); Ctrl+N/P
+  navigate, Tab inserts the highlighted command, Esc closes (interrupts the
+  stream only when the menu is closed). `/btw` streams its side answer under
+  a hollow `○` marker (ephemeral = unsaved); `/bookmark` toggles as in the
+  CLI; `/vim` explains vim mode is classic-UI-only.
+- **`Alt+V` image paste** on vision models inserts a literal `[Image #N]`
+  marker into the input; on submit the markers are spliced back into
+  multi-part content. No sentinel pills — plain text markers are enough since
+  the input scrolls internally.
 
 ## Parity gaps vs the scrollback UI
 
-- [ ] Local slash commands (`/btw`, `/vim`, `/bookmark`) — slash input is
-      rejected with a warning so it never reaches the model.
-- [ ] Slash-command Tab completion.
-- [ ] Image paste (`Alt+V`) on vision models. (Text paste pills are
-      unnecessary here — the input area scrolls internally.)
-- [ ] Vim mode.
+- [ ] Vim mode — deferred; needs bespoke vim emulation on Textual's
+      `TextArea`, and it's low-priority.
 - [ ] Terminal-native text selection/copy (alternate-screen limitation;
-      Textual's own selection has rough edges) — likely answer is a
-      "copy last response" binding plus the `$EDITOR` export.
-- [ ] Transcript is not left in scrollback on exit — consider printing it on
-      quit.
+      Textual's own selection has rough edges) — approach TBD, to be
+      discussed before building anything.
 - [ ] The `-r` chat selector runs pre-launch as the raw-terminal Rich UI, not
       as a Textual screen.
+
+## Decided against
+
+- Printing the transcript to scrollback on exit.
 
 ## Later / ideas
 

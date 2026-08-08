@@ -17,8 +17,10 @@ config/`models.yaml` format, alias names).
   marker glyphs instead of role labels, a dim one-line session header, and a
   bordered input pinned at the bottom with a contextual hint line. Opt in per
   run with `--tui` or by default with `"tui": true` in `config.json`; the
-  classic scrollback UI remains the default. Local slash commands and image
-  paste aren't available in TUI mode yet.
+  classic scrollback UI remains the default. Local slash commands work with a
+  completion menu (type `/`; Ctrl+N/P to navigate, Tab to complete), and
+  `Alt+V` image paste is supported on vision models; vim mode isn't available
+  in TUI mode yet.
 
 ### Changed
 

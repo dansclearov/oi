@@ -295,10 +295,23 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   bottom-aligns anchored content even when it's shorter than the container
   (negative scroll), so the conversation hugs the input chat-app-style —
   deliberate; user scroll releases the anchor.
+- **Slash commands**: executed in `_handle_local_command` (`/btw` streams a
+  side answer in the turn worker under the hollow `○` marker — nothing
+  appended or saved; `/bookmark` mirrors the CLI; `/vim` just explains it's
+  classic-UI-only). Typing `/` opens `SlashMenu` (`tui/slash_menu.py`),
+  driven from `TextArea.Changed` via `local_commands.get_slash_prefix` (the
+  same predicate the prompt_toolkit completer uses). Tab/Ctrl+N/Ctrl+P/Esc
+  are intercepted in `ChatInput._on_key` and posted as semantic `MenuKey`
+  messages — the app maps Esc to menu-close when open, stream-interrupt
+  otherwise.
+- **Image paste**: `Alt+V` (app binding, no-op without `supports_vision`)
+  reads the clipboard via `ui/image_paste.py:read_clipboard_image` in a
+  thread and inserts a literal `[Image #N]` marker; `_build_user_content`
+  splices pending `BinaryContent` back in at the markers on submit. No PUA
+  sentinels/pills in the TUI.
 - Gotchas: don't name `OiApp` attributes `_registry` or `_log` (Textual
-  App/DOMNode internals). Local slash commands and Alt+V image paste are not
-  wired up in TUI mode yet; slash input is rejected with a warning so it never
-  reaches the model. Textual is pinned `>=8.2.8,<9` (fast-moving majors).
+  App/DOMNode internals). Vim mode is not implemented in TUI mode. Textual is
+  pinned `>=8.2.8,<9` (fast-moving majors).
 - Tests drive the app headlessly via `app.run_test()` + a fake client
   (`tests/unit/tui/test_app.py`); `app.export_screenshot()` renders an SVG if
   you need to eyeball layout.

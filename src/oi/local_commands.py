@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from difflib import get_close_matches
 
 from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.document import Document
 
 
 @dataclass(frozen=True)
@@ -49,19 +48,22 @@ def build_argument_error_message(command_name: str) -> str:
     return f"{command_name} does not take arguments."
 
 
-def _get_completion_prefix(document: Document) -> str | None:
-    """Return the slash-command prefix when completion should be active."""
-    if "\n" in document.text:
+def get_slash_prefix(text: str, text_before_cursor: str) -> str | None:
+    """Return the slash-command prefix when completion should be active.
+
+    UI-agnostic: used by both the prompt_toolkit completer and the TUI menu.
+    """
+    if "\n" in text:
         return None
 
-    stripped_text = document.text.lstrip()
+    stripped_text = text.lstrip()
     if not stripped_text.startswith("/"):
         return None
 
     if any(char.isspace() for char in stripped_text):
         return None
 
-    prefix = document.text_before_cursor.lstrip()
+    prefix = text_before_cursor.lstrip()
     if not prefix.startswith("/"):
         return None
 
@@ -75,7 +77,7 @@ class SlashCommandCompleter(Completer):
     """Complete standalone local slash commands."""
 
     def get_completions(self, document, complete_event):
-        prefix = _get_completion_prefix(document)
+        prefix = get_slash_prefix(document.text, document.text_before_cursor)
         if prefix is None:
             return
 

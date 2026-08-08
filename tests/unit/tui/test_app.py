@@ -103,14 +103,83 @@ def test_slash_command_is_not_sent_to_model(tmp_path):
             app.query_one(ChatInput).insert("/vim")
             await pilot.press("enter")
             await pilot.pause()
+            assert list(app.query(".info-label")), "expected a /vim notice"
 
+            app.query_one(ChatInput).insert("/nonsense")
+            await pilot.press("enter")
+            await pilot.pause()
             warnings = app.query(".warning-label")
-            assert list(warnings), "expected a warning notice for local commands"
+            assert list(warnings), "expected a warning for the unknown command"
 
         assert ctx.llm_client.calls == 0
         assert chat.messages == []
 
     asyncio.run(scenario())
+
+
+def test_slash_menu_completes_on_tab(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            from oi.tui.slash_menu import SlashMenu
+
+            chat_input = app.query_one(ChatInput)
+            menu = app.query_one(SlashMenu)
+            await pilot.press("/")
+            assert menu.is_open
+            assert menu.selected_name == "/btw"
+
+            await pilot.press("ctrl+n")
+            assert menu.selected_name == "/bookmark"
+
+            await pilot.press("tab")
+            assert chat_input.text == "/bookmark "
+            await pilot.pause()
+            assert not menu.is_open
+
+            await pilot.press("escape")  # menu closed: must not crash/quit
+            chat_input.clear()
+            await pilot.press("b")  # not a slash prefix
+            assert not menu.is_open
+
+    asyncio.run(scenario())
+
+
+def test_btw_turn_streams_but_saves_nothing(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            app.query_one(ChatInput).insert("/btw what about this?")
+            await pilot.press("enter")
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.pause()
+
+            markdown = app.query_one(ResponseView).query_one(Markdown)
+            assert markdown.source == RESPONSE_MD
+
+        assert ctx.llm_client.calls == 1
+        assert chat.messages == []  # side question leaves no trace
+        assert chat.pending_system_prompt == "test prompt"  # not consumed
+        assert ctx.chat_manager.get_last_chat() is None
+
+    asyncio.run(scenario())
+
+
+def test_build_user_content_splices_images(tmp_path):
+    from pydantic_ai.messages import BinaryContent
+
+    app = _make_app(tmp_path)[0]
+    image = BinaryContent(data=b"png", media_type="image/png")
+    app._pending_images[1] = image
+
+    content = app._build_user_content("look at [Image #1] please")
+
+    assert content == ["look at ", image, " please"]
+    assert app._pending_images == {}
+    # Markers with no pending image stay literal text.
+    assert app._build_user_content("[Image #9]") == "[Image #9]"
 
 
 def test_interrupt_discards_pending_message(tmp_path):

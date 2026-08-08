@@ -9,9 +9,17 @@ contextual hint line beneath it.
 """
 
 import asyncio
+import re
 from dataclasses import replace
-from typing import Optional
+from typing import Optional, Sequence, Union
 
+from pydantic_ai.messages import (
+    BinaryContent,
+    ModelRequest,
+    SystemPromptPart,
+    UserContent,
+    UserPromptPart,
+)
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
@@ -36,10 +44,13 @@ from oi.core.session import Chat
 from oi.llm_types import ModelCapabilities
 from oi.local_commands import (
     LOCAL_COMMANDS,
+    build_argument_error_message,
     build_unknown_command_message,
+    get_slash_prefix,
     parse_local_command,
 )
 from oi.registry import ModelRegistry
+from oi.tui.slash_menu import SlashMenu
 from oi.tui.renderer import (
     ResponseStarted,
     TextDelta,
@@ -47,6 +58,7 @@ from oi.tui.renderer import (
     ToolLine,
     TuiRenderer,
 )
+from oi.ui.image_paste import read_clipboard_image
 from oi.ui.labels import (
     AI_LABEL,
     ERROR_LABEL,
@@ -58,6 +70,11 @@ from oi.ui.labels import (
 )
 
 MAX_INPUT_HEIGHT = 8
+
+# Marker for ephemeral `/btw` side answers: hollow = not saved to the chat.
+BTW_MARKER = "○ "
+
+UserContentInput = Union[str, Sequence[UserContent]]
 
 LABEL_CSS = {
     USER_LABEL: "user-label",
@@ -161,12 +178,28 @@ class ResponseView(Vertical):
 
 
 class ChatInput(TextArea):
-    """Multi-line input: Enter submits, Shift+Enter/Ctrl+J insert a newline."""
+    """Multi-line input: Enter submits, Shift+Enter/Ctrl+J insert a newline.
+
+    Menu-related keys (Tab, Ctrl+N/P, Esc) are posted as `MenuKey` messages —
+    the app decides what they mean based on whether the slash menu is open.
+    """
 
     class Submitted(Message):
         def __init__(self, text: str) -> None:
             super().__init__()
             self.text = text
+
+    class MenuKey(Message):
+        def __init__(self, action: str) -> None:
+            super().__init__()
+            self.action = action
+
+    _MENU_KEYS = {
+        "tab": "complete",
+        "ctrl+n": "down",
+        "ctrl+p": "up",
+        "escape": "dismiss",
+    }
 
     def __init__(self) -> None:
         super().__init__()
@@ -184,7 +217,16 @@ class ChatInput(TextArea):
             start, end = self.selection
             self._replace_via_keyboard("\n", start, end)
             return
+        if event.key in self._MENU_KEYS:
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.MenuKey(self._MENU_KEYS[event.key]))
+            return
         await super()._on_key(event)
+
+    @property
+    def text_before_cursor(self) -> str:
+        return self.get_text_range((0, 0), self.cursor_location)
 
     def sync_height(self) -> None:
         """Grow with the (wrapped) content up to a cap, like a chat compose box.
@@ -301,7 +343,10 @@ class OiApp(App):
         Binding("escape", "interrupt", show=False),
         Binding("pageup", "scroll_log_up", show=False),
         Binding("pagedown", "scroll_log_down", show=False),
+        Binding("alt+v", "paste_image", show=False),
     ]
+
+    _IMAGE_MARKER_RE = re.compile(r"\[Image #(\d+)\]")
 
     def __init__(
         self,
@@ -319,9 +364,12 @@ class OiApp(App):
         self._active_view: Optional[ResponseView] = None
         self._turn_worker: Optional[Worker] = None
         self._capabilities: Optional[ModelCapabilities] = None
+        self._pending_images: dict[int, BinaryContent] = {}
+        self._image_counter = 0
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="log")
+        yield SlashMenu()
         with Horizontal(id="input-row"):
             yield Static(Text("❯ "), id="prompt-marker")
             yield ChatInput()
@@ -408,33 +456,125 @@ class OiApp(App):
         # between, so both land in the same frame (no vanish-then-reappear).
         input_widget.clear()
         input_widget.sync_height()
+        self._mount_notice_nowait(USER_LABEL, text)
 
         parsed_command = parse_local_command(text)
         if parsed_command is not None:
-            command_name, _ = parsed_command
-            self._mount_notice_nowait(
-                WARNING_LABEL,
-                "Local commands aren't available in TUI mode yet."
-                if command_name in LOCAL_COMMANDS
-                else build_unknown_command_message(command_name),
+            command_name, command_args = parsed_command
+            await self._handle_local_command(command_name, command_args)
+            return
+
+        content = self._build_user_content(text)
+        self._turn_worker = self.run_worker(self._run_turn(content), exclusive=True)
+        self._set_hint("esc to interrupt")
+
+    async def _handle_local_command(self, command_name: str, command_args: str) -> None:
+        if command_name not in LOCAL_COMMANDS:
+            await self._mount_notice(
+                WARNING_LABEL, build_unknown_command_message(command_name)
             )
             return
 
-        self._mount_notice_nowait(USER_LABEL, text)
-        self._turn_worker = self.run_worker(self._run_turn(text), exclusive=True)
-        self._set_hint("esc to interrupt")
+        if command_name == "/btw":
+            question = command_args.strip()
+            if not question:
+                await self._mount_notice(
+                    INFO_LABEL,
+                    "Usage: /btw <question> — ask a one-off question with the full "
+                    "conversation as context. Nothing is saved to the chat.",
+                )
+                return
+            self._turn_worker = self.run_worker(
+                self._run_btw_turn(question), exclusive=True
+            )
+            self._set_hint("esc to interrupt")
+            return
+
+        if command_args:
+            await self._mount_notice(
+                WARNING_LABEL, build_argument_error_message(command_name)
+            )
+            return
+
+        if command_name == "/vim":
+            await self._mount_notice(
+                INFO_LABEL,
+                "Vim mode isn't supported in TUI mode (it still works in the "
+                "classic UI).",
+            )
+            return
+
+        if command_name == "/bookmark":
+            if not self._chat.should_be_saved():
+                await self._mount_notice(
+                    WARNING_LABEL,
+                    "Bookmarking is available after the first saved exchange.",
+                )
+                return
+            bookmarked = self._ctx.chat_manager.toggle_bookmark(self._chat)
+            if bookmarked is not None:
+                action = "Bookmarked" if bookmarked else "Removed bookmark from"
+                await self._mount_notice(
+                    INFO_LABEL, f"{action} chat: {self._chat.metadata.title}"
+                )
+
+    def _build_user_content(self, text: str) -> UserContentInput:
+        """Splice pending pasted images in at their `[Image #N]` markers."""
+        if not self._pending_images:
+            return text
+
+        parts: list[UserContent] = []
+        pos = 0
+        for match in self._IMAGE_MARKER_RE.finditer(text):
+            image = self._pending_images.get(int(match.group(1)))
+            if image is None:
+                continue
+            if match.start() > pos:
+                parts.append(text[pos : match.start()])
+            parts.append(image)
+            pos = match.end()
+        if pos < len(text):
+            parts.append(text[pos:])
+        self._pending_images.clear()
+
+        if not any(isinstance(part, BinaryContent) for part in parts):
+            return text
+        return parts
 
     @on(TextArea.Changed)
-    def _on_input_changed(self, event: TextArea.Changed) -> None:
+    async def _on_input_changed(self, event: TextArea.Changed) -> None:
         if isinstance(event.text_area, ChatInput):
             event.text_area.sync_height()
+            prefix = get_slash_prefix(
+                event.text_area.text, event.text_area.text_before_cursor
+            )
+            await self.query_one(SlashMenu).update_filter(prefix)
+
+    @on(ChatInput.MenuKey)
+    async def _on_menu_key(self, message: ChatInput.MenuKey) -> None:
+        menu = self.query_one(SlashMenu)
+        if message.action == "dismiss":
+            if menu.is_open:
+                await menu.update_filter(None)
+            else:
+                self.action_interrupt()
+            return
+        if message.action in ("up", "down"):
+            menu.move(-1 if message.action == "up" else 1)
+            return
+        if message.action == "complete":
+            selected = menu.selected_name
+            if selected is not None:
+                input_widget = self.query_one(ChatInput)
+                input_widget.text = selected + " "
+                input_widget.move_cursor(input_widget.document.end)
 
     # --- streaming turn -------------------------------------------------
 
-    async def _run_turn(self, text: str) -> None:
+    async def _run_turn(self, content: UserContentInput) -> None:
         chat = self._chat
         ctx = self._ctx
-        chat.append_user_message(text)
+        chat.append_user_message(content)
         options = replace(
             ctx.chat_options,
             notify=lambda msg: self.post_message(Notice(INFO_LABEL, msg)),
@@ -474,6 +614,65 @@ class OiApp(App):
             )
         if not ctx.ephemeral:
             await asyncio.to_thread(self._persist_turn)
+
+    async def _run_btw_turn(self, question: str) -> None:
+        """Stream a `/btw` side answer against a copy of the history.
+
+        Nothing is appended or saved; the answer renders under the hollow
+        `○` marker.
+        """
+        chat = self._chat
+        ctx = self._ctx
+        side_messages = list(chat.messages)
+        parts: list = []
+        # On a brand-new chat the system prompt is still pending (not yet in
+        # history); include it transiently without consuming it.
+        if chat.pending_system_prompt:
+            parts.append(SystemPromptPart(chat.pending_system_prompt))
+        parts.append(UserPromptPart(question))
+        side_messages.append(ModelRequest(parts=parts))
+
+        options = replace(
+            ctx.chat_options,
+            assistant_label_text=BTW_MARKER,
+            notify=lambda msg: self.post_message(Notice(INFO_LABEL, msg)),
+        )
+        try:
+            await ctx.llm_client.chat_async(
+                side_messages,
+                ctx.active_model,
+                options,
+                capabilities_override=chat.metadata.get_model_capabilities_snapshot(),
+                renderer_factory=lambda caps, opts: TuiRenderer(
+                    caps, opts, self.post_message
+                ),
+            )
+        except asyncio.CancelledError:
+            self.post_message(TurnFinished(interrupted=True))
+            raise
+        except Exception as exc:
+            self.post_message(TurnFinished(interrupted=False))
+            self.post_message(
+                Notice(ERROR_LABEL, f"Request failed: {type(exc).__name__}: {exc}")
+            )
+            return
+        self.post_message(TurnFinished(interrupted=False))
+
+    async def action_paste_image(self) -> None:
+        if self._capabilities is None or not self._capabilities.supports_vision:
+            return
+        image = await asyncio.to_thread(read_clipboard_image)
+        if image is None:
+            await self._mount_notice(INFO_LABEL, "No image found in the clipboard.")
+            return
+        data, media_type = image
+        self._image_counter += 1
+        self._pending_images[self._image_counter] = BinaryContent(
+            data=data, media_type=media_type
+        )
+        input_widget = self.query_one(ChatInput)
+        input_widget.insert(f"[Image #{self._image_counter}] ")
+        input_widget.focus()
 
     def _persist_turn(self) -> None:
         """Save + titling, off the event loop (smart titles call the API)."""
