@@ -151,6 +151,21 @@ class Chat:
             parts.append(TextPart(content=response))
         self.messages.append(ModelResponse(parts=parts))
 
+    def discard_pending_user_message(self) -> None:
+        """Drop a trailing user request after a failed or interrupted turn.
+
+        If the request carried the system prompt (first turn of a new chat),
+        restore it as pending so the next message re-injects it.
+        """
+        if not self.messages or not isinstance(self.messages[-1], ModelRequest):
+            return
+
+        request = self.messages.pop()
+        for part in request.parts:
+            if isinstance(part, SystemPromptPart):
+                self.pending_system_prompt = part.content
+                break
+
     def should_be_saved(self) -> bool:
         """Check if chat should be saved (has non-system messages)."""
         return count_non_system_messages(self.messages) > 0

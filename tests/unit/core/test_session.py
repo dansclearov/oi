@@ -163,6 +163,40 @@ class TestChat:
 
         assert not chat.should_be_saved()
 
+    def test_discard_pending_user_message_restores_system_prompt(self):
+        chat = Chat.create_new("gpt-4o", "You are terse.")
+        chat.append_user_message("Hello")
+        assert chat.pending_system_prompt is None
+
+        chat.discard_pending_user_message()
+
+        assert chat.messages == []
+        assert chat.pending_system_prompt == "You are terse."
+        # The next message must carry the system prompt again.
+        chat.append_user_message("Hello again")
+        roles = [type(part).__name__ for part in chat.messages[0].parts]
+        assert roles == ["SystemPromptPart", "UserPromptPart"]
+
+    def test_discard_pending_user_message_keeps_prompt_unset_mid_chat(self):
+        chat = Chat.create_new("gpt-4o", "You are terse.")
+        chat.append_user_message("Hello")
+        chat.append_assistant_response("Hi!")
+        chat.append_user_message("Second question")
+
+        chat.discard_pending_user_message()
+
+        assert len(chat.messages) == 2  # first exchange intact
+        assert chat.pending_system_prompt is None
+
+    def test_discard_pending_user_message_ignores_trailing_response(self):
+        chat = Chat.create_new("gpt-4o", "You are terse.")
+        chat.append_user_message("Hello")
+        chat.append_assistant_response("Hi!")
+
+        chat.discard_pending_user_message()
+
+        assert len(chat.messages) == 2
+
 
 class TestChatRepository:
     def test_save_and_load(self):
