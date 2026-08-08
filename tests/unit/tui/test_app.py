@@ -295,6 +295,42 @@ class TestCtrlC:
 
         asyncio.run(scenario())
 
+    def test_clicking_the_log_keeps_the_input_usable(self, tmp_path):
+        """Selecting with the mouse must not steal focus from the input."""
+
+        async def scenario():
+            app, chat, ctx = _make_app(tmp_path)
+            async with app.run_test() as pilot:
+                chat_input = app.query_one(ChatInput)
+                await pilot.click("#log", offset=(3, 1))
+                await pilot.pause()
+                assert app.focused is chat_input
+
+                await pilot.press("a")
+                await pilot.pause()
+                assert chat_input.text == "a"
+
+        asyncio.run(scenario())
+
+    def test_focus_returns_to_the_input_after_copying(self, tmp_path):
+        async def scenario():
+            app, chat, ctx = _make_app(tmp_path)
+            async with app.run_test() as pilot:
+                chat_input = app.query_one(ChatInput)
+                app.copy_to_clipboard = lambda text: None
+                app.screen.get_selected_text = lambda: "selected text"
+                app.set_focus(None)
+
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                assert app.focused is chat_input
+
+                await pilot.press("b")
+                await pilot.pause()
+                assert chat_input.text == "b"
+
+        asyncio.run(scenario())
+
     def test_interrupt_takes_priority_over_copy(self, tmp_path):
         async def scenario():
             app, chat, ctx = _make_app(tmp_path)

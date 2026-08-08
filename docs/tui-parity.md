@@ -62,14 +62,15 @@ UI. Update this file when a gap closes or a decision changes.
   IME, so we show it and shape it via DECSCUSR — steady bar in insert,
   steady block in normal/visual, no blinking (vim-style); reset to the
   terminal default on exit.
-
 - **Ctrl+C forks three ways** (CC-style), each press with one meaning: it
   interrupts a running stream; else copies the mouse selection (Textual's own
   selection + OSC 52) and clears it; else arms exit, showing "press ctrl+c
-  again to exit" in the hint line for `CTRL_C_EXIT_WINDOW` (1.5s) — a second
+  again to exit" in the hint line for `CTRL_C_EXIT_WINDOW` (1s) — a second
   press within the window quits. Only a *bare* press arms, so copying twice
   in a row can never quit. Terminal-native selection is still unavailable
-  (alternate screen), so this is Textual's selection, which needs the mouse.
+  (alternate screen), so this is Textual's selection, which needs the mouse
+  — the log is `can_focus=False` so clicking it to select never steals
+  focus from the input.
 
 ## Parity gaps vs the scrollback UI
 

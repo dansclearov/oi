@@ -82,7 +82,7 @@ MAX_INPUT_HEIGHT = 8
 
 # How long the "press ctrl+c again to exit" arming lasts. Long enough to read
 # the hint and react, short enough that a stray later press is just a no-op.
-CTRL_C_EXIT_WINDOW = 1.5
+CTRL_C_EXIT_WINDOW = 1.0
 HINT_FLASH_SECONDS = 1.5
 
 # Marker for ephemeral `/btw` side answers: hollow = not saved to the chat.
@@ -621,7 +621,10 @@ class OiApp(App):
         self._capabilities: Optional[ModelCapabilities] = None
 
     def compose(self) -> ComposeResult:
-        yield VerticalScroll(id="log")
+        # can_focus=False: clicking the log to start a mouse selection must not
+        # steal focus from the input, or typing afterwards goes nowhere.
+        # Keyboard scrolling stays available through the app-level bindings.
+        yield VerticalScroll(id="log", can_focus=False)
         yield SlashMenu()
         with Horizontal(id="input-row"):
             yield Static(Text("❯ "), id="prompt-marker")
@@ -1015,6 +1018,7 @@ class OiApp(App):
             self.clear_selection()
             self._exit_armed_at = None
             self._flash_hint("copied to clipboard", HINT_FLASH_SECONDS)
+            self.query_one(ChatInput).focus()
             return
 
         now = monotonic()
