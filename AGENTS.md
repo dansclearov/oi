@@ -272,9 +272,14 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   don't reintroduce `batch_update` there), and `ChatInput.sync_height` writes
   `styles.height` only when the value changes because height is a
   layout-invalidating property (a write per keystroke relayouts the screen).
-- **Interrupt = worker cancellation**: Ctrl+C (priority binding) cancels the
-  turn worker when streaming, else touches+exits. `chat_async` maps
-  `CancelledError` to mark-interrupted + finalize before re-raising.
+- **Interrupt = worker cancellation**: Ctrl+C (priority binding, so it
+  pre-empts Textual's own `ctrl+c` → `screen.copy_text`) forks in
+  `action_interrupt_or_quit`: cancel the turn worker while streaming, else
+  copy `screen.get_selected_text()` via `copy_to_clipboard` (OSC 52) and
+  clear the selection, else arm exit for `CTRL_C_EXIT_WINDOW` and quit on a
+  second press. Only a bare press arms, so repeated copies can't quit.
+  `chat_async` maps `CancelledError` to mark-interrupted + finalize before
+  re-raising.
 - Post-turn save + smart titling run in `asyncio.to_thread` — `LLMClient.chat`
   (sync) is called there for titles, which is why its SIGINT handler installs
   only on the main thread.

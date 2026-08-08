@@ -11,6 +11,7 @@ contextual hint line beneath it.
 import asyncio
 import re
 from dataclasses import replace
+from time import monotonic
 from typing import TYPE_CHECKING, Optional, Sequence, Union, cast
 
 if TYPE_CHECKING:
@@ -31,6 +32,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Markdown, Static, TextArea
 from textual.widgets.text_area import Selection
+from textual.timer import Timer
 from textual.widgets._markdown import MarkdownStream
 from textual.worker import Worker
 
@@ -77,6 +79,11 @@ from oi.ui.labels import (
 )
 
 MAX_INPUT_HEIGHT = 8
+
+# How long the "press ctrl+c again to exit" arming lasts. Long enough to read
+# the hint and react, short enough that a stray later press is just a no-op.
+CTRL_C_EXIT_WINDOW = 1.5
+HINT_FLASH_SECONDS = 1.5
 
 # Marker for ephemeral `/btw` side answers: hollow = not saved to the chat.
 BTW_MARKER = "○ "
@@ -608,6 +615,8 @@ class OiApp(App):
         self._active_view: Optional[ResponseView] = None
         self._response_active = False
         self._response_label: Optional[str] = None
+        self._hint_timer: Optional[Timer] = None
+        self._exit_armed_at: Optional[float] = None
         self._turn_worker: Optional[Worker] = None
         self._capabilities: Optional[ModelCapabilities] = None
 
@@ -645,7 +654,19 @@ class OiApp(App):
         self._write_terminal("\x1b[6 q" if bar else "\x1b[2 q")
 
     def _set_hint(self, text: str) -> None:
+        if self._hint_timer is not None:
+            self._hint_timer.stop()
+            self._hint_timer = None
         self.query_one("#hint", Static).update(Text(text))
+
+    def _flash_hint(self, text: str, seconds: float) -> None:
+        """Show a hint that reverts to the state's default hint on its own."""
+        self._set_hint(text)
+        self._hint_timer = self.set_timer(seconds, self._restore_hint)
+
+    def _restore_hint(self) -> None:
+        self._exit_armed_at = None
+        self._set_hint("esc to interrupt" if self._response_active else "")
 
     @property
     def _chat_log(self) -> VerticalScroll:
@@ -729,6 +750,7 @@ class OiApp(App):
 
         assert content is not None
         self._turn_worker = self.run_worker(self._run_turn(content), exclusive=True)
+        self._exit_armed_at = None
         self._set_hint("esc to interrupt")
 
     async def _handle_local_command(self, command_name: str, command_args: str) -> None:
@@ -977,10 +999,33 @@ class OiApp(App):
             self._turn_worker.cancel()
 
     def action_interrupt_or_quit(self) -> None:
+        """Ctrl+C: interrupt a stream, else copy a selection, else exit.
+
+        Each press has exactly one meaning, and only a bare press (nothing
+        streaming, nothing selected) arms the exit — so copying twice in a row
+        can never quit the app.
+        """
         if self._turn_worker is not None and self._turn_worker.is_running:
             self._turn_worker.cancel()
-        else:
+            return
+
+        selected = self.screen.get_selected_text()
+        if selected:
+            self.copy_to_clipboard(selected)
+            self.clear_selection()
+            self._exit_armed_at = None
+            self._flash_hint("copied to clipboard", HINT_FLASH_SECONDS)
+            return
+
+        now = monotonic()
+        if (
+            self._exit_armed_at is not None
+            and now - self._exit_armed_at <= CTRL_C_EXIT_WINDOW
+        ):
             self._touch_and_exit()
+            return
+        self._exit_armed_at = now
+        self._flash_hint("press ctrl+c again to exit", CTRL_C_EXIT_WINDOW)
 
     async def action_quit(self) -> None:
         self._touch_and_exit()

@@ -23,7 +23,9 @@ config/`models.yaml` format, alias names).
   emulation (normal/visual/visual-line, counts, `d c y` operators with
   motions and text objects, `f/t` finds, paste register, undo/redo). The
   input cursor is the terminal's own — steady, never blinking, bar-shaped in
-  insert and block in normal/visual.
+  insert and block in normal/visual. Ctrl+C interrupts a running response,
+  copies the current selection when there is one, and otherwise asks for a
+  second press to exit.
 
 ### Changed
 

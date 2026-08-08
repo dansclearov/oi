@@ -63,11 +63,16 @@ UI. Update this file when a gap closes or a decision changes.
   steady block in normal/visual, no blinking (vim-style); reset to the
   terminal default on exit.
 
+- **Ctrl+C forks three ways** (CC-style), each press with one meaning: it
+  interrupts a running stream; else copies the mouse selection (Textual's own
+  selection + OSC 52) and clears it; else arms exit, showing "press ctrl+c
+  again to exit" in the hint line for `CTRL_C_EXIT_WINDOW` (1.5s) — a second
+  press within the window quits. Only a *bare* press arms, so copying twice
+  in a row can never quit. Terminal-native selection is still unavailable
+  (alternate screen), so this is Textual's selection, which needs the mouse.
+
 ## Parity gaps vs the scrollback UI
 
-- [ ] Terminal-native text selection/copy (alternate-screen limitation;
-      Textual's own selection has rough edges) — approach TBD, to be
-      discussed before building anything.
 - [ ] The `-r` chat selector runs pre-launch as the raw-terminal Rich UI, not
       as a Textual screen.
 

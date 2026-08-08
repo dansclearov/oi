@@ -228,6 +228,110 @@ def test_consume_content_splices_images():
     assert chat_input.consume_content("[Image #9]") == "[Image #9]"
 
 
+class TestCtrlC:
+    """Ctrl+C forks: interrupt a stream, else copy a selection, else exit."""
+
+    def _hint(self, app) -> str:
+        from textual.widgets import Static
+
+        return str(app.query_one("#hint", Static).render())
+
+    def test_copies_selection_and_never_exits(self, tmp_path):
+        async def scenario():
+            app, chat, ctx = _make_app(tmp_path)
+            copied: list[str] = []
+
+            async with app.run_test() as pilot:
+                app.copy_to_clipboard = copied.append
+                app.screen.get_selected_text = lambda: "selected text"
+
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                assert copied == ["selected text"]
+                assert app.is_running
+                assert "copied" in self._hint(app)
+
+                # A second copy in quick succession must not quit.
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                assert copied == ["selected text", "selected text"]
+                assert app.is_running
+
+        asyncio.run(scenario())
+
+    def test_double_press_exits_and_single_press_only_arms(self, tmp_path):
+        async def scenario():
+            app, chat, ctx = _make_app(tmp_path)
+            async with app.run_test() as pilot:
+                app.screen.get_selected_text = lambda: None
+
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                assert app.is_running, "one press must not exit"
+                assert "again to exit" in self._hint(app)
+
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                assert not app.is_running
+
+        asyncio.run(scenario())
+
+    def test_arming_lapses_after_the_window(self, tmp_path):
+        async def scenario():
+            from oi.tui import app as tui_app
+
+            app, chat, ctx = _make_app(tmp_path)
+            async with app.run_test() as pilot:
+                app.screen.get_selected_text = lambda: None
+
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                # Simulate the window elapsing without waiting for it.
+                app._exit_armed_at -= tui_app.CTRL_C_EXIT_WINDOW + 1
+
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                assert app.is_running, "a lapsed arming must not exit"
+
+        asyncio.run(scenario())
+
+    def test_interrupt_takes_priority_over_copy(self, tmp_path):
+        async def scenario():
+            app, chat, ctx = _make_app(tmp_path)
+            started = asyncio.Event()
+            copied: list[str] = []
+
+            async def hanging_chat_async(
+                messages,
+                model_name_or_alias,
+                options=None,
+                *,
+                capabilities_override=None,
+                renderer_factory=None,
+            ):
+                started.set()
+                await asyncio.Event().wait()
+
+            ctx.llm_client.chat_async = hanging_chat_async
+
+            async with app.run_test() as pilot:
+                app.copy_to_clipboard = copied.append
+                app.screen.get_selected_text = lambda: "selected text"
+
+                app.query_one(ChatInput).insert("hi")
+                await pilot.press("enter")
+                await asyncio.wait_for(started.wait(), timeout=5)
+
+                await pilot.press("ctrl+c")
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+
+                assert copied == [], "streaming Ctrl+C must interrupt, not copy"
+                assert app.is_running
+
+        asyncio.run(scenario())
+
+
 def test_cursor_cannot_rest_inside_a_marker(tmp_path):
     from pydantic_ai.messages import BinaryContent
 
