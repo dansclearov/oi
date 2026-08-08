@@ -39,6 +39,7 @@ from oi.app import (
     _maybe_generate_smart_title,
     _update_title_from_first_user_message,
 )
+from oi.config.settings import update_user_config
 from oi.core.message_utils import flatten_history, latest_system_prompt
 from oi.core.session import Chat
 from oi.llm_types import ModelCapabilities
@@ -51,6 +52,8 @@ from oi.local_commands import (
 )
 from oi.registry import ModelRegistry
 from oi.tui.slash_menu import SlashMenu
+from oi.tui.vim import Mode as VimMode
+from oi.tui.vim import VimHandler
 from oi.tui.renderer import (
     ResponseStarted,
     TextDelta,
@@ -204,6 +207,24 @@ class ChatInput(TextArea):
     def __init__(self) -> None:
         super().__init__()
         self.show_line_numbers = False
+        self.vim: Optional[VimHandler] = None
+
+    def set_vim_enabled(self, enabled: bool) -> None:
+        if enabled and self.vim is None:
+            self.vim = VimHandler(self)
+        elif not enabled:
+            self.vim = None
+
+    def vim_reset(self) -> None:
+        """Back to insert mode for the next message (like a fresh prompt)."""
+        if self.vim is not None:
+            self.vim.enter_insert()
+
+    def vim_escape(self) -> bool:
+        """Esc with no menu open. True when the vim layer consumed it."""
+        if self.vim is None:
+            return False
+        return self.vim.handle_escape()
 
     async def _on_key(self, event) -> None:
         if event.key == "enter":
@@ -221,6 +242,15 @@ class ChatInput(TextArea):
             event.stop()
             event.prevent_default()
             self.post_message(self.MenuKey(self._MENU_KEYS[event.key]))
+            return
+        if (
+            self.vim is not None
+            and self.vim.mode is not VimMode.INSERT
+            and (event.is_printable or event.key == "ctrl+r")
+        ):
+            event.stop()
+            event.prevent_default()
+            self.vim.handle_key(event)
             return
         await super()._on_key(event)
 
@@ -383,6 +413,7 @@ class OiApp(App):
         await self._replay_session_context()
         self._chat_log.anchor()
         input_widget = self.query_one(ChatInput)
+        input_widget.set_vim_enabled(self._ctx.config.vim_mode)
         input_widget.sync_height()
         input_widget.focus()
 
@@ -455,6 +486,7 @@ class OiApp(App):
         # Clear the input and queue the echoed row without awaiting in
         # between, so both land in the same frame (no vanish-then-reappear).
         input_widget.clear()
+        input_widget.vim_reset()
         input_widget.sync_height()
         self._mount_notice_nowait(USER_LABEL, text)
 
@@ -497,11 +529,11 @@ class OiApp(App):
             return
 
         if command_name == "/vim":
-            await self._mount_notice(
-                INFO_LABEL,
-                "Vim mode isn't supported in TUI mode (it still works in the "
-                "classic UI).",
-            )
+            self._ctx.config.vim_mode = not self._ctx.config.vim_mode
+            update_user_config("vim_mode", self._ctx.config.vim_mode)
+            self.query_one(ChatInput).set_vim_enabled(self._ctx.config.vim_mode)
+            status = "enabled" if self._ctx.config.vim_mode else "disabled"
+            await self._mount_notice(INFO_LABEL, f"Vim mode {status}.")
             return
 
         if command_name == "/bookmark":
@@ -556,6 +588,8 @@ class OiApp(App):
         if message.action == "dismiss":
             if menu.is_open:
                 await menu.update_filter(None)
+            elif self.query_one(ChatInput).vim_escape():
+                pass
             else:
                 self.action_interrupt()
             return

@@ -18,9 +18,10 @@ config/`models.yaml` format, alias names).
   bordered input pinned at the bottom with a contextual hint line. Opt in per
   run with `--tui` or by default with `"tui": true` in `config.json`; the
   classic scrollback UI remains the default. Local slash commands work with a
-  completion menu (type `/`; Ctrl+N/P to navigate, Tab to complete), and
-  `Alt+V` image paste is supported on vision models; vim mode isn't available
-  in TUI mode yet.
+  completion menu (type `/`; Ctrl+N/P to navigate, Tab to complete), `Alt+V`
+  image paste is supported on vision models, and vim mode has its own modal
+  emulation (normal/visual/visual-line, counts, `d c y` operators with
+  motions and text objects, `f/t` finds, paste register, undo/redo).
 
 ### Changed
 

@@ -40,11 +40,17 @@ UI. Update this file when a gap closes or a decision changes.
   marker into the input; on submit the markers are spliced back into
   multi-part content. No sentinel pills — plain text markers are enough since
   the input scrolls internally.
+- **Vim mode is bespoke** (`tui/vim.py`; prompt_toolkit's `vi_mode` can't be
+  embedded, and the only PyPI option runs real vim in a pty). Subset:
+  normal/visual/visual-line; `h j k l w b e 0 ^ $ gg G` with counts;
+  `f F t T ; ,`; `i a I A o O`; `x X r s S D C ~`; `d c y` with motions,
+  doubled, or `i`/`a` text objects (`w`, quotes, bracket pairs); `p P` (one
+  internal register); `u`/`Ctrl+R`. No mode indicator by choice. Not
+  implemented: `.` repeat, macros, marks, named registers, `>>`/`<<`, `ip`.
+  Esc precedence: close slash menu → leave insert/visual → interrupt stream.
 
 ## Parity gaps vs the scrollback UI
 
-- [ ] Vim mode — deferred; needs bespoke vim emulation on Textual's
-      `TextArea`, and it's low-priority.
 - [ ] Terminal-native text selection/copy (alternate-screen limitation;
       Textual's own selection has rough edges) — approach TBD, to be
       discussed before building anything.

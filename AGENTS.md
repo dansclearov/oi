@@ -309,9 +309,18 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   thread and inserts a literal `[Image #N]` marker; `_build_user_content`
   splices pending `BinaryContent` back in at the markers on submit. No PUA
   sentinels/pills in the TUI.
+- **Vim mode**: `tui/vim.py` — `VimHandler`, a modal key dispatcher over
+  TextArea primitives (document index/location conversion, selection, edit
+  methods, undo stack); motions/text objects are pure `(text, index)`
+  functions with direct unit tests. `ChatInput` delegates printable keys to
+  it when mode != insert; Esc is routed by the app with precedence
+  slash-menu-close → vim (insert/visual → normal, or clear pending) →
+  interrupt-stream. `/vim` toggles it live and persists via
+  `update_user_config`; submit resets to insert mode. There is deliberately
+  no mode indicator.
 - Gotchas: don't name `OiApp` attributes `_registry` or `_log` (Textual
-  App/DOMNode internals). Vim mode is not implemented in TUI mode. Textual is
-  pinned `>=8.2.8,<9` (fast-moving majors).
+  App/DOMNode internals). Textual is pinned `>=8.2.8,<9` (fast-moving
+  majors).
 - Tests drive the app headlessly via `app.run_test()` + a fake client
   (`tests/unit/tui/test_app.py`); `app.export_screenshot()` renders an SVG if
   you need to eyeball layout.
