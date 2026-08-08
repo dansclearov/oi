@@ -233,10 +233,14 @@ class VimHandler:
         self,
         text_area: "TextArea",
         on_mode_change: Optional[Callable[[Mode], None]] = None,
+        atom_spans: Optional[Callable[[], list[tuple[int, int]]]] = None,
     ) -> None:
         self.ta = text_area
         self._mode = Mode.INSERT
         self.on_mode_change = on_mode_change
+        # Ranges that behave as one character: the cursor never lands inside
+        # one, motions step over them, and edits take them whole.
+        self.atom_spans = atom_spans
         self._count = ""
         self._operator: Optional[str] = None
         self._pending: Optional[str] = (
@@ -276,9 +280,37 @@ class VimHandler:
     def _loc(self, idx: int):
         return self._document.get_location_from_index(max(0, min(idx, len(self._text))))
 
+    # -------------------------------------------------------------- atoms
+
+    def _atoms(self) -> list[tuple[int, int]]:
+        return self.atom_spans() if self.atom_spans is not None else []
+
+    def _snap(self, idx: int, *, forward: bool) -> int:
+        """Push an index out of any atom it landed inside."""
+        for start, end in self._atoms():
+            if start < idx < end:
+                return end if forward else start
+        return idx
+
+    def _expand_range(self, start: int, end: int) -> tuple[int, int]:
+        """Grow an edit range to fully cover any atom it clips."""
+        for atom_start, atom_end in self._atoms():
+            if atom_start < end and start < atom_end:
+                start = min(start, atom_start)
+                end = max(end, atom_end)
+        return start, end
+
+    def _atom_at(self, idx: int) -> Optional[tuple[int, int]]:
+        """The atom starting at or containing idx, if any."""
+        for start, end in self._atoms():
+            if start <= idx < end:
+                return start, end
+        return None
+
     def _move(self, idx: int, *, select: Optional[bool] = None) -> None:
         if select is None:
             select = self.mode in (Mode.VISUAL, Mode.VISUAL_LINE)
+        idx = self._snap(idx, forward=idx >= self._idx)
         self.ta.move_cursor(self._loc(idx), select=select)
         if self.mode is Mode.VISUAL_LINE:
             self._expand_visual_line()
@@ -365,8 +397,9 @@ class VimHandler:
             count = self._take_count()
             _, line_end = line_bounds(text, idx)
             if idx + count <= line_end:
-                self.ta.replace(char * count, self._loc(idx), self._loc(idx + count))
-                self._move(idx + count - 1)
+                start, end = self._expand_range(idx, idx + count)
+                self.ta.replace(char * count, self._loc(start), self._loc(end))
+                self._move(start + count - 1)
             return
 
         if pending in ("f", "F", "t", "T"):
@@ -500,6 +533,8 @@ class VimHandler:
     def _apply_operator(
         self, operator: str, start: int, end: int, *, linewise: bool
     ) -> None:
+        if not linewise:
+            start, end = self._expand_range(start, end)
         text = self._text
         snippet = text[start:end]
         self._register = snippet
@@ -622,17 +657,19 @@ class VimHandler:
             count = self._take_count()
             _, end = line_bounds(text, idx)
             end_idx = min(idx + count, end)
-            if end_idx > idx:
-                self._register = text[idx:end_idx]
+            start_idx, end_idx = self._expand_range(idx, end_idx)
+            if end_idx > start_idx:
+                self._register = text[start_idx:end_idx]
                 self._register_linewise = False
-                self.ta.delete(self._loc(idx), self._loc(end_idx))
+                self.ta.delete(self._loc(start_idx), self._loc(end_idx))
                 self._clamp_to_line()
         elif char == "X":
             count = self._take_count()
             start, _ = line_bounds(text, idx)
             start_idx = max(idx - count, start)
             if start_idx < idx:
-                self.ta.delete(self._loc(start_idx), self._loc(idx))
+                start_idx, end_idx = self._expand_range(start_idx, idx)
+                self.ta.delete(self._loc(start_idx), self._loc(end_idx))
         elif char == "D":
             _, end = line_bounds(text, idx)
             if end > idx:
@@ -647,7 +684,8 @@ class VimHandler:
         elif char == "s":
             count = self._take_count()
             _, end = line_bounds(text, idx)
-            self.ta.delete(self._loc(idx), self._loc(min(idx + count, end)))
+            start_idx, end_idx = self._expand_range(idx, min(idx + count, end))
+            self.ta.delete(self._loc(start_idx), self._loc(end_idx))
             self.enter_insert()
         elif char == "S":
             start, end = line_bounds(text, idx)
@@ -657,7 +695,11 @@ class VimHandler:
             self._pending = "r"
         elif char == "~":
             _, end = line_bounds(text, idx)
-            if idx < end:
+            atom = self._atom_at(idx)
+            if atom is not None:
+                # Atoms have no case; step over instead of mangling them.
+                self._move(min(atom[1], max(end - 1, 0)), select=False)
+            elif idx < end:
                 self.ta.replace(
                     text[idx].swapcase(), self._loc(idx), self._loc(idx + 1)
                 )

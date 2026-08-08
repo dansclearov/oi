@@ -237,6 +237,10 @@ class ChatInput(TextArea):
                 on_mode_change=lambda mode: self.post_message(
                     self.VimModeChanged(mode)
                 ),
+                # Image markers behave as single characters under vim motions.
+                atom_spans=lambda: [
+                    (start, end) for start, end, _ in self._intact_markers()
+                ],
             )
         elif not enabled and self.vim is not None:
             self.vim = None
@@ -486,6 +490,14 @@ class OiApp(App):
         text-style: none !important;
         color: ansi_default !important;
         background: transparent !important;
+    }
+    /* nvim-style visual selection: paint a background and leave the text's
+       own color alone, so it reads as a layer over the text. Textual's ansi
+       theme would otherwise use `text-style: reverse`, which swaps fg/bg and
+       makes dim text (image markers) look like it vanished. */
+    ChatInput .text-area--selection {
+        background: ansi_bright_black !important;
+        text-style: none !important;
     }
     #hint {
         height: 1;

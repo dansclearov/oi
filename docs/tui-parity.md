@@ -38,11 +38,17 @@ UI. Update this file when a gap closes or a decision changes.
   CLI; `/vim` explains vim mode is classic-UI-only.
 - **`Alt+V` image paste** on vision models inserts a literal `[Image #N]`
   marker into the input; on submit the markers are spliced back into
-  multi-part content. Numbering restarts at 1 each turn, survivors renumber
-  when a marker is removed, and Backspace/Delete treat a marker as one unit
-  (matching the scrollback pills). Editing *inside* a marker demotes it to
-  plain text and drops the image — the one behavior gap vs the atomic PUA
-  pills.
+  multi-part content. Numbering restarts at 1 each turn and survivors
+  renumber when a marker is removed. Markers behave as **one character**:
+  Backspace/Delete take them whole, and under vim the cursor never lands
+  inside one — `h`/`l` step over it, `x`/`s`/`r` take it whole, and any
+  operator range that clips one expands to cover it. Only typing *inside* a
+  marker in insert mode still demotes it to plain text (dropping the image).
+- **Visual selection is nvim-style**: a solid background with the text's own
+  foreground left intact, so it reads as a layer over the text. Textual's
+  ansi theme defaults to `text-style: reverse`, which swaps fg/bg and made
+  dim text (image markers) look like it had vanished. True translucency
+  isn't available — ANSI palette colors can't alpha-blend.
 - **Vim mode is bespoke** (`tui/vim.py`; prompt_toolkit's `vi_mode` can't be
   embedded, and the only PyPI option runs real vim in a pty). Subset:
   normal/visual/visual-line; `h j k l w b e 0 ^ $ gg G` with counts;

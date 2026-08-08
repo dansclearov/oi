@@ -175,6 +175,101 @@ def test_normal_mode_blocks_typing():
     _drive("abc", ["escape", "0", "z", "q"], "abc", Mode.NORMAL)
 
 
+class TestImageMarkerAtoms:
+    """Image markers behave as one character under vim motions/edits."""
+
+    def _setup(self, pilot, app, text_before="hello ", text_after=" world"):
+        from pydantic_ai.messages import BinaryContent
+
+        from oi.tui.app import ChatInput
+
+        chat_input = app.query_one(ChatInput)
+        chat_input.set_vim_enabled(True)
+        chat_input.focus()
+        chat_input.insert(text_before)
+        chat_input.attach_image(BinaryContent(data=b"x", media_type="image/png"))
+        # attach_image adds a trailing space; drop it for exact assertions.
+        chat_input.delete((0, len(chat_input.text) - 1), (0, len(chat_input.text)))
+        chat_input.insert(text_after)
+        return chat_input
+
+    def test_l_steps_over_the_whole_marker(self):
+        async def scenario():
+            app = _make_input()
+            async with app.run_test() as pilot:
+                chat_input = self._setup(pilot, app)
+                await pilot.pause()
+                for key in ["escape", "0"] + ["l"] * 6:
+                    await pilot.press(key)
+                # Cursor sits at the marker start after 6 rights.
+                assert chat_input.cursor_location == (0, 6)
+                await pilot.press("l")
+                # One more right clears the entire marker.
+                assert chat_input.cursor_location == (0, 16)
+
+        asyncio.run(scenario())
+
+    def test_h_steps_back_over_the_whole_marker(self):
+        async def scenario():
+            app = _make_input()
+            async with app.run_test() as pilot:
+                chat_input = self._setup(pilot, app)
+                await pilot.pause()
+                for key in ["escape", "0"] + ["l"] * 7:
+                    await pilot.press(key)
+                assert chat_input.cursor_location == (0, 16)
+                await pilot.press("h")
+                assert chat_input.cursor_location == (0, 6)
+
+        asyncio.run(scenario())
+
+    def test_x_deletes_the_marker_whole(self):
+        async def scenario():
+            app = _make_input()
+            async with app.run_test() as pilot:
+                chat_input = self._setup(pilot, app)
+                await pilot.pause()
+                for key in ["escape", "0"] + ["l"] * 6 + ["x"]:
+                    await pilot.press(key)
+                assert chat_input.text == "hello  world"
+                assert chat_input._images == {}
+
+        asyncio.run(scenario())
+
+    def test_operator_clipping_a_marker_takes_it_whole(self):
+        async def scenario():
+            app = _make_input()
+            async with app.run_test() as pilot:
+                # "hi [Image #1]x" — dw from inside "hi" would clip the marker.
+                chat_input = self._setup(pilot, app, "hi ", "x")
+                await pilot.pause()
+                for key in ["escape", "0", "d", "w"]:
+                    await pilot.press(key)
+                # The marker is never left half-deleted.
+                assert "[Image" not in chat_input.text or chat_input.text.startswith(
+                    "[Image #1]"
+                )
+
+        asyncio.run(scenario())
+
+    def test_visual_selection_covers_the_marker(self):
+        async def scenario():
+            app = _make_input()
+            async with app.run_test() as pilot:
+                chat_input = self._setup(pilot, app)
+                await pilot.pause()
+                for key in ["escape", "0", "v", "l", "l", "l", "l", "l", "l", "l"]:
+                    await pilot.press(key)
+                # Selection ends past the marker, never inside it.
+                assert chat_input.selection.end == (0, 16)
+                await pilot.press("d")
+                # Visual is inclusive of the cursor char (the space at 16).
+                assert chat_input.text == "world"
+                assert chat_input._images == {}
+
+        asyncio.run(scenario())
+
+
 def test_mode_changes_are_reported():
     async def scenario():
         from textual import on
