@@ -85,6 +85,13 @@ MAX_INPUT_HEIGHT = 8
 CTRL_C_EXIT_WINDOW = 1.0
 HINT_FLASH_SECONDS = 1.5
 
+# Vim mode indicators, following vim itself: normal mode shows nothing.
+VIM_MODE_HINTS = {
+    VimMode.INSERT: "-- INSERT --",
+    VimMode.VISUAL: "-- VISUAL --",
+    VimMode.VISUAL_LINE: "-- VISUAL LINE --",
+}
+
 # Marker for ephemeral `/btw` side answers: hollow = not saved to the chat.
 BTW_MARKER = "○ "
 
@@ -225,7 +232,9 @@ class ChatInput(TextArea):
     }
 
     class VimModeChanged(Message):
-        def __init__(self, mode: VimMode) -> None:
+        """Vim mode changed; `mode` is None when vim mode is off."""
+
+        def __init__(self, mode: Optional[VimMode]) -> None:
             super().__init__()
             self.mode = mode
 
@@ -250,9 +259,10 @@ class ChatInput(TextArea):
                     (start, end) for start, end, _ in self._intact_markers()
                 ],
             )
+            self.post_message(self.VimModeChanged(self.vim.mode))
         elif not enabled and self.vim is not None:
             self.vim = None
-            self.post_message(self.VimModeChanged(VimMode.INSERT))
+            self.post_message(self.VimModeChanged(None))
 
     def vim_reset(self) -> None:
         """Back to insert mode for the next message (like a fresh prompt)."""
@@ -617,6 +627,8 @@ class OiApp(App):
         self._response_label: Optional[str] = None
         self._hint_timer: Optional[Timer] = None
         self._exit_armed_at: Optional[float] = None
+        self._vim_mode: Optional[VimMode] = None
+        self._turn_active = False
         self._turn_worker: Optional[Worker] = None
         self._capabilities: Optional[ModelCapabilities] = None
 
@@ -652,9 +664,11 @@ class OiApp(App):
 
     @on(ChatInput.VimModeChanged)
     def _on_vim_mode_changed(self, message: ChatInput.VimModeChanged) -> None:
-        # Steady bar in insert, steady block otherwise (vim-style, no blink).
-        bar = message.mode is VimMode.INSERT
+        self._vim_mode = message.mode
+        # Steady bar in insert (and with vim off), steady block otherwise.
+        bar = message.mode in (None, VimMode.INSERT)
         self._write_terminal("\x1b[6 q" if bar else "\x1b[2 q")
+        self._refresh_hint()
 
     def _set_hint(self, text: str) -> None:
         if self._hint_timer is not None:
@@ -662,14 +676,27 @@ class OiApp(App):
             self._hint_timer = None
         self.query_one("#hint", Static).update(Text(text))
 
+    def _refresh_hint(self) -> None:
+        """Show the hint the current state calls for.
+
+        Segments, vim-style: the mode indicator first (nothing in normal mode,
+        nothing when vim is off), then any contextual hint. Flashes override
+        the whole line until they lapse.
+        """
+        segments = [VIM_MODE_HINTS.get(self._vim_mode), self._turn_hint()]
+        self._set_hint("  ".join(part for part in segments if part))
+
+    def _turn_hint(self) -> str:
+        return "esc to interrupt" if self._turn_active else ""
+
     def _flash_hint(self, text: str, seconds: float) -> None:
-        """Show a hint that reverts to the state's default hint on its own."""
+        """Show a hint that reverts to the state's own hint on its own."""
         self._set_hint(text)
         self._hint_timer = self.set_timer(seconds, self._restore_hint)
 
     def _restore_hint(self) -> None:
         self._exit_armed_at = None
-        self._set_hint("esc to interrupt" if self._response_active else "")
+        self._refresh_hint()
 
     @property
     def _chat_log(self) -> VerticalScroll:
@@ -754,7 +781,8 @@ class OiApp(App):
         assert content is not None
         self._turn_worker = self.run_worker(self._run_turn(content), exclusive=True)
         self._exit_armed_at = None
-        self._set_hint("esc to interrupt")
+        self._turn_active = True
+        self._refresh_hint()
 
     async def _handle_local_command(self, command_name: str, command_args: str) -> None:
         if command_name not in LOCAL_COMMANDS:
@@ -775,7 +803,8 @@ class OiApp(App):
             self._turn_worker = self.run_worker(
                 self._run_btw_turn(question), exclusive=True
             )
-            self._set_hint("esc to interrupt")
+            self._turn_active = True
+            self._refresh_hint()
             return
 
         if command_args:
@@ -985,7 +1014,8 @@ class OiApp(App):
 
     @on(TurnFinished)
     async def _on_turn_finished(self, message: TurnFinished) -> None:
-        self._set_hint("")
+        self._turn_active = False
+        self._refresh_hint()
         self._response_active = False
         if message.interrupted and self._active_view is None:
             # Interrupted before any output arrived: still show it was cancelled.

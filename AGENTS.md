@@ -330,8 +330,10 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   it when mode != insert; Esc is routed by the app with precedence
   slash-menu-close → vim (insert/visual → normal, or clear pending) →
   interrupt-stream. `/vim` toggles it live and persists via
-  `update_user_config`; submit resets to insert mode. There is deliberately
-  no mode indicator.
+  `update_user_config`; submit resets to insert mode. `VimModeChanged`
+  carries `None` when vim is off, which drives both the cursor shape and the
+  hint line's `-- INSERT --`/`-- VISUAL --` indicator (nothing in normal
+  mode, vim's own convention).
 - **Cursor**: the input uses the terminal's hardware cursor, not the painted
   cell (which is hidden via `!important` CSS on `.text-area--cursor`).
   Textual already keeps `app.cursor_position` at the TextArea cursor (IME

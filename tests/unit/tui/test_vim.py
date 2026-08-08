@@ -270,6 +270,57 @@ class TestImageMarkerAtoms:
         asyncio.run(scenario())
 
 
+def test_hint_line_shows_the_vim_mode(tmp_path):
+    """`-- INSERT --`/`-- VISUAL --`, nothing in normal mode (like vim)."""
+
+    async def scenario():
+        from textual.widgets import Static
+
+        from tests.unit.tui.test_app import _make_app
+
+        from oi.tui.app import ChatInput
+
+        app, chat, ctx = _make_app(tmp_path)
+
+        def hint() -> str:
+            return str(app.query_one("#hint", Static).render())
+
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.set_vim_enabled(True)
+            chat_input.focus()
+            chat_input.insert("abc")
+            await pilot.pause()
+            assert hint() == "-- INSERT --"
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert hint() == "", "normal mode shows nothing"
+
+            await pilot.press("v")
+            await pilot.pause()
+            assert hint() == "-- VISUAL --"
+
+            await pilot.press("V")
+            await pilot.pause()
+            assert hint() == "-- VISUAL LINE --"
+
+            # A ctrl+c flash overrides the whole line, then it comes back.
+            app.screen.get_selected_text = lambda: None
+            await pilot.press("ctrl+c")
+            await pilot.pause()
+            assert "again to exit" in hint()
+            app._restore_hint()
+            assert hint() == "-- VISUAL LINE --"
+
+            # Turning vim off drops the indicator entirely.
+            chat_input.set_vim_enabled(False)
+            await pilot.pause()
+            assert hint() == ""
+
+    asyncio.run(scenario())
+
+
 def test_terminal_cursor_follows_a_shrinking_input(tmp_path):
     """`dd` on a multi-line input must not strand the cursor on the border.
 
@@ -307,7 +358,7 @@ def test_mode_changes_are_reported():
 
         from oi.tui.app import ChatInput
 
-        seen: list[Mode] = []
+        seen: list[Mode | None] = []
 
         class Harness(App):
             def compose(self):
@@ -333,6 +384,13 @@ def test_mode_changes_are_reported():
                 await pilot.press(key)
             await pilot.pause()
 
-        assert seen == [Mode.NORMAL, Mode.VISUAL, Mode.NORMAL, Mode.INSERT]
+        # Enabling vim announces the starting mode, then each transition.
+        assert seen == [
+            Mode.INSERT,
+            Mode.NORMAL,
+            Mode.VISUAL,
+            Mode.NORMAL,
+            Mode.INSERT,
+        ]
 
     asyncio.run(scenario())

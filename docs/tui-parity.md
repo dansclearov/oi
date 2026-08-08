@@ -16,9 +16,11 @@ UI. Update this file when a gap closes or a decision changes.
   no tools besides provider-native web search (currently suppressed in the
   stream), so the dot is assistant-only for now.
 - **One dim header line** (`oi · <model> (sub|api) · new chat` /
-  `· <title> · <n> messages`) instead of the scrollback banner; keybind hints
-  live in a fixed 1-row hint line under the input (`esc to interrupt` while
-  streaming, empty when idle).
+  `· <title> · <n> messages`) instead of the scrollback banner; status lives
+  in a fixed 1-row hint line under the input, composed vim-style: the mode
+  indicator first (`-- INSERT --` / `-- VISUAL --` / `-- VISUAL LINE --`,
+  nothing in normal mode or with vim off), then `esc to interrupt` while
+  streaming. Ctrl+C flashes override the whole line until they lapse.
 - **Input pinned at the bottom** with top/bottom border rules only — no side
   borders or padding, so the prompt `❯` column-aligns with the conversation.
 - **Short conversations bottom-align** against the input (chat-app gravity;
@@ -54,8 +56,8 @@ UI. Update this file when a gap closes or a decision changes.
   normal/visual/visual-line; `h j k l w b e 0 ^ $ gg G` with counts;
   `f F t T ; ,`; `i a I A o O`; `x X r s S D C ~`; `d c y` with motions,
   doubled, or `i`/`a` text objects (`w`, quotes, bracket pairs); `p P` (one
-  internal register); `u`/`Ctrl+R`. No mode indicator by choice. Not
-  implemented: `.` repeat, macros, marks, named registers, `>>`/`<<`, `ip`.
+  internal register); `u`/`Ctrl+R`. Not implemented: `.` repeat, macros,
+  marks, named registers, `>>`/`<<`, `ip`.
   Esc precedence: close slash menu → leave insert/visual → interrupt stream.
 - **The cursor is the terminal's own**, not Textual's painted cell: Textual
   keeps the (hidden) hardware cursor positioned at the TextArea cursor for

@@ -25,7 +25,8 @@ config/`models.yaml` format, alias names).
   input cursor is the terminal's own — steady, never blinking, bar-shaped in
   insert and block in normal/visual. Ctrl+C interrupts a running response,
   copies the current selection when there is one, and otherwise asks for a
-  second press to exit.
+  second press to exit. A status line under the input shows the vim mode
+  (`-- INSERT --`, `-- VISUAL --`) alongside contextual hints.
 
 ### Changed
 
