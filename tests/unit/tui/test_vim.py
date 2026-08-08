@@ -270,6 +270,36 @@ class TestImageMarkerAtoms:
         asyncio.run(scenario())
 
 
+def test_terminal_cursor_follows_a_shrinking_input(tmp_path):
+    """`dd` on a multi-line input must not strand the cursor on the border.
+
+    The input is bottom-pinned, so losing a line moves the whole widget down;
+    Textual doesn't refresh the terminal cursor on geometry changes.
+    """
+
+    async def scenario():
+        from tests.unit.tui.test_app import _make_app
+
+        from oi.tui.app import ChatInput
+
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test(size=(60, 14)) as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.set_vim_enabled(True)
+            chat_input.focus()
+            chat_input.insert("line one\nline two\nline three")
+            await pilot.pause()
+
+            for key in ["escape", "g", "g", "d", "d"]:
+                await pilot.press(key)
+            await pilot.pause()
+
+            assert chat_input.text == "line two\nline three"
+            assert app.cursor_position == chat_input.cursor_screen_offset
+
+    asyncio.run(scenario())
+
+
 def test_mode_changes_are_reported():
     async def scenario():
         from textual import on

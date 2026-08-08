@@ -447,9 +447,22 @@ class ChatInput(TextArea):
         current = self.styles.height
         if current is None or current.value != height:
             self.styles.height = height
+            self.call_after_refresh(self._sync_terminal_cursor)
+
+    def _sync_terminal_cursor(self) -> None:
+        """Re-point the terminal cursor after the widget moves.
+
+        The input is pinned to the bottom, so resizing it shifts its whole
+        region; Textual only refreshes `app.cursor_position` when the
+        selection, scroll, or focus changes, which would leave the hardware
+        cursor on the row the input used to occupy (its border).
+        """
+        if self.has_focus:
+            self.app.cursor_position = self.cursor_screen_offset
 
     def on_resize(self, event) -> None:
         self.sync_height()
+        self.call_after_refresh(self._sync_terminal_cursor)
 
 
 class OiApp(App):
