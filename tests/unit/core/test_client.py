@@ -1,9 +1,11 @@
+import asyncio
+
 import pytest
 from unittest.mock import Mock
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelResponse, TextPart
 
-from oi.core.client import LLMClient, subscription_billing_active
+from oi.core.client import LLMClient, _PreparedRequest, subscription_billing_active
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.registry import ModelRegistry
 
@@ -52,7 +54,11 @@ class TestLLMClient:
         handler = Mock()
         handler.has_visible_output.return_value = False
         sleep_calls = []
-        monkeypatch.setattr("oi.core.client.time.sleep", sleep_calls.append)
+
+        async def fake_sleep(seconds):
+            sleep_calls.append(seconds)
+
+        monkeypatch.setattr("oi.core.client.asyncio.sleep", fake_sleep)
 
         attempts = {"count": 0}
         result = object()
@@ -65,25 +71,24 @@ class TestLLMClient:
 
         client._stream_model_response = fake_stream  # type: ignore[method-assign]
 
-        response = client._stream_model_response_with_retry(
-            "provider:model",
-            [],
-            None,
-            Mock(),
-            handler,
+        response = asyncio.run(
+            client._stream_model_response_with_retry(
+                "provider:model",
+                [],
+                None,
+                Mock(),
+                handler,
+            )
         )
 
         assert response is result
         assert attempts["count"] == 3
         assert sleep_calls == [4, 8]
 
-    def test_stream_model_response_with_retry_does_not_retry_after_output(
-        self, monkeypatch
-    ):
+    def test_stream_model_response_with_retry_does_not_retry_after_output(self):
         client = LLMClient(Mock())
         handler = Mock()
         handler.has_visible_output.return_value = True
-        monkeypatch.setattr("oi.core.client.time.sleep", Mock())
 
         attempts = {"count": 0}
 
@@ -94,12 +99,14 @@ class TestLLMClient:
         client._stream_model_response = fake_stream  # type: ignore[method-assign]
 
         with pytest.raises(RuntimeError, match="mid-stream failure"):
-            client._stream_model_response_with_retry(
-                "provider:model",
-                [],
-                None,
-                Mock(),
-                handler,
+            asyncio.run(
+                client._stream_model_response_with_retry(
+                    "provider:model",
+                    [],
+                    None,
+                    Mock(),
+                    handler,
+                )
             )
 
         assert attempts["count"] == 1
@@ -142,7 +149,7 @@ class TestLLMClient:
         captured = {}
         response = ModelResponse(parts=[TextPart(content="ok")])
 
-        def fake_stream(
+        async def fake_stream(
             model_name, model_messages, model_settings, request_parameters, handler
         ):
             captured["model_name"] = model_name
@@ -167,7 +174,7 @@ class TestLLMClient:
         captured = {}
         response = ModelResponse(parts=[TextPart(content="ok")])
 
-        def fake_stream(
+        async def fake_stream(
             model_name, model_messages, model_settings, request_parameters, handler
         ):
             captured["model_settings"] = model_settings
@@ -193,7 +200,7 @@ class TestLLMClient:
         captured = {}
         response = ModelResponse(parts=[TextPart(content="ok")])
 
-        def fake_stream(
+        async def fake_stream(
             model_name, model_messages, model_settings, request_parameters, handler
         ):
             captured["model_settings"] = model_settings
@@ -221,7 +228,7 @@ class TestLLMClient:
         captured = {}
         response = ModelResponse(parts=[TextPart(content="ok")])
 
-        def fake_stream(
+        async def fake_stream(
             model_name, model_messages, model_settings, request_parameters, handler
         ):
             captured["model_settings"] = model_settings
@@ -276,7 +283,7 @@ class TestSubscriptionFallback:
         calls = []
         api_response = ModelResponse(parts=[TextPart(content="api")])
 
-        def fake_retry(model, messages, settings, params, handler):
+        async def fake_retry(model, messages, settings, params, handler):
             calls.append(model)
             if len(calls) == 1 and first_raises is not None:
                 raise first_raises
@@ -284,6 +291,17 @@ class TestSubscriptionFallback:
 
         monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_retry)
         return client, calls, api_response
+
+    def _prepared(self, handler) -> _PreparedRequest:
+        return _PreparedRequest(
+            handler=handler,
+            options=ChatOptions(silent=True),
+            model_target=Mock(),  # subscription model instance
+            model_settings=None,
+            api_fallback=("api", None),
+            request_parameters=Mock(),
+            messages=[],
+        )
 
     def test_falls_back_to_api_on_exhaustion(self, monkeypatch):
         monkeypatch.setattr("oi.core.client.codex_auth.is_exhausted", lambda: True)
@@ -293,15 +311,7 @@ class TestSubscriptionFallback:
         handler = Mock()
         handler.has_visible_output.return_value = False
 
-        result = client._stream_with_fallback(
-            Mock(),  # subscription model instance
-            None,
-            ("api", None),
-            [],
-            Mock(),
-            handler,
-            ChatOptions(silent=True),
-        )
+        result = asyncio.run(client._stream_with_fallback(self._prepared(handler)))
 
         assert result is api_response
         assert calls[1] == "api"
@@ -314,15 +324,7 @@ class TestSubscriptionFallback:
         handler.has_visible_output.return_value = False
 
         with pytest.raises(ModelHTTPError):
-            client._stream_with_fallback(
-                Mock(),
-                None,
-                ("api", None),
-                [],
-                Mock(),
-                handler,
-                ChatOptions(silent=True),
-            )
+            asyncio.run(client._stream_with_fallback(self._prepared(handler)))
         assert len(calls) == 1
 
     def test_no_fallback_after_visible_output(self, monkeypatch):
@@ -333,15 +335,7 @@ class TestSubscriptionFallback:
         handler.has_visible_output.return_value = True
 
         with pytest.raises(ModelHTTPError):
-            client._stream_with_fallback(
-                Mock(),
-                None,
-                ("api", None),
-                [],
-                Mock(),
-                handler,
-                ChatOptions(silent=True),
-            )
+            asyncio.run(client._stream_with_fallback(self._prepared(handler)))
         assert len(calls) == 1
 
     def test_exhausted_disables_billing_indicator(self, monkeypatch):

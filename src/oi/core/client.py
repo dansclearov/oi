@@ -1,9 +1,10 @@
 import asyncio
 import os
 import signal
+import threading
 import time
-from dataclasses import replace
-from typing import Optional, Sequence
+from dataclasses import dataclass, replace
+from typing import Callable, Optional, Sequence
 
 from pydantic_ai.direct import model_request_stream
 from pydantic_ai.exceptions import ModelHTTPError
@@ -15,8 +16,11 @@ from pydantic_ai.settings import ModelSettings
 from oi.core import codex_auth
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.registry import ModelRegistry
+from oi.renderers import ResponseRenderer
 from oi.response_handler import ResponseHandler
 from oi.ui.labels import INFO_LABEL, ansi_message
+
+RendererFactory = Callable[[ModelCapabilities, ChatOptions], ResponseRenderer]
 
 MAX_CHAT_ATTEMPTS = 3
 RETRY_WAIT_MIN_SECONDS = 4
@@ -62,6 +66,27 @@ def subscription_billing_active(
     )
 
 
+def _notify(options: ChatOptions, message: str) -> None:
+    """Route an informational notice to the configured sink (stdout by default)."""
+    if options.notify is not None:
+        options.notify(message)
+    else:
+        print(ansi_message(INFO_LABEL, message))
+
+
+@dataclass
+class _PreparedRequest:
+    """Everything a single streaming turn needs, computed before it starts."""
+
+    handler: ResponseHandler
+    options: ChatOptions
+    model_target: Model | str
+    model_settings: Optional[ModelSettings]
+    api_fallback: Optional[tuple[str, Optional[ModelSettings]]]
+    request_parameters: ModelRequestParameters
+    messages: list[ModelMessage]
+
+
 class LLMClient:
     def __init__(self, registry: ModelRegistry):
         self.registry = registry
@@ -75,7 +100,88 @@ class LLMClient:
         *,
         capabilities_override: Optional[ModelCapabilities] = None,
     ) -> ModelResponse:
-        """Get response from the specified model."""
+        """Get response from the specified model (synchronous entry point).
+
+        Runs the turn on its own event loop and maps Ctrl+C to an interrupt.
+        The SIGINT handler is only installed on the main thread; background
+        callers (e.g. smart titling from the TUI) just run without it.
+        """
+        prepared = self._prepare_request(
+            messages, model_name_or_alias, options, capabilities_override
+        )
+        self.interrupt_handler = prepared.handler
+
+        def handle_interrupt(signum, frame):
+            if self.interrupt_handler:
+                self.interrupt_handler.mark_interrupted()
+            raise KeyboardInterrupt()
+
+        on_main_thread = threading.current_thread() is threading.main_thread()
+        old_handler = (
+            signal.signal(signal.SIGINT, handle_interrupt) if on_main_thread else None
+        )
+
+        try:
+            return asyncio.run(self._run_prepared(prepared))
+        finally:
+            if on_main_thread:
+                signal.signal(signal.SIGINT, old_handler)
+            self.interrupt_handler = None
+
+    async def chat_async(
+        self,
+        messages: Sequence[ModelMessage],
+        model_name_or_alias: str,
+        options: Optional[ChatOptions] = None,
+        *,
+        capabilities_override: Optional[ModelCapabilities] = None,
+        renderer_factory: Optional[RendererFactory] = None,
+    ) -> ModelResponse:
+        """Async entry point for callers that own an event loop (the TUI).
+
+        No signal handling: interruption is task cancellation, which marks the
+        response interrupted and finalizes rendering before propagating.
+        """
+        prepared = self._prepare_request(
+            messages,
+            model_name_or_alias,
+            options,
+            capabilities_override,
+            renderer_factory=renderer_factory,
+        )
+        self.interrupt_handler = prepared.handler
+        try:
+            return await self._run_prepared(prepared)
+        finally:
+            self.interrupt_handler = None
+
+    async def _run_prepared(self, prepared: _PreparedRequest) -> ModelResponse:
+        """Stream a prepared turn, finalizing the renderer on every outcome."""
+        handler = prepared.handler
+        handler.start_response()
+        try:
+            response = await self._stream_with_fallback(prepared)
+        except asyncio.CancelledError:
+            # Sync path: Ctrl+C cancels the task (already marked interrupted by
+            # the signal handler). Async path: the caller cancelled the turn.
+            handler.mark_interrupted()
+            handler.finish_response()
+            raise
+        except Exception:
+            handler.finish_response()
+            raise
+        handler.finish_response(response)
+        return response
+
+    def _prepare_request(
+        self,
+        messages: Sequence[ModelMessage],
+        model_name_or_alias: str,
+        options: Optional[ChatOptions],
+        capabilities_override: Optional[ModelCapabilities],
+        renderer_factory: Optional[RendererFactory] = None,
+    ) -> _PreparedRequest:
+        """Resolve model, settings, and rendering for a single turn."""
         if options is None:
             options = ChatOptions()
 
@@ -106,7 +212,7 @@ class LLMClient:
             and codex_auth.consume_recovery()
             and not effective_options.silent
         ):
-            print(ansi_message(INFO_LABEL, "Back on the ChatGPT subscription."))
+            _notify(effective_options, "Back on the ChatGPT subscription.")
 
         # Start with extra_params from model config, then override with request-specific settings
         model_settings = dict(capabilities.extra_params)
@@ -168,42 +274,23 @@ class LLMClient:
                 ModelSettings(api_settings) if api_settings else None,
             )
 
-        handler = ResponseHandler(capabilities, effective_options)
-        self.interrupt_handler = handler
+        renderer = (
+            renderer_factory(capabilities, effective_options)
+            if renderer_factory is not None
+            else None
+        )
+        handler = ResponseHandler(capabilities, effective_options, renderer=renderer)
 
-        # Always operate on ModelMessage history.
-        model_messages = list(messages)
-
-        def handle_interrupt(signum, frame):
-            if self.interrupt_handler:
-                self.interrupt_handler.mark_interrupted()
-            raise KeyboardInterrupt()
-
-        old_handler = signal.signal(signal.SIGINT, handle_interrupt)
-
-        try:
-            handler.start_response()
-            try:
-                response: Optional[ModelResponse] = self._stream_with_fallback(
-                    model_target,
-                    model_settings_param,
-                    api_fallback,
-                    model_messages,
-                    request_parameters,
-                    handler,
-                    effective_options,
-                )
-            except KeyboardInterrupt:
-                handler.finish_response()
-                raise
-            except Exception:
-                handler.finish_response()
-                raise
-            handler.finish_response(response)
-            return response
-        finally:
-            signal.signal(signal.SIGINT, old_handler)
-            self.interrupt_handler = None
+        return _PreparedRequest(
+            handler=handler,
+            options=effective_options,
+            model_target=model_target,
+            model_settings=model_settings_param,
+            api_fallback=api_fallback,
+            request_parameters=request_parameters,
+            # Always operate on ModelMessage history.
+            messages=list(messages),
+        )
 
     def resolve_capabilities(
         self,
@@ -248,53 +335,43 @@ class LLMClient:
         )
         return OpenAIResponsesModel(provider_model_id, provider=provider)
 
-    def _stream_with_fallback(
-        self,
-        primary_model: Model | str,
-        primary_settings: Optional[ModelSettings],
-        api_fallback: Optional[tuple[str, Optional[ModelSettings]]],
-        model_messages: list[ModelMessage],
-        request_parameters: ModelRequestParameters,
-        handler: ResponseHandler,
-        options: ChatOptions,
-    ) -> ModelResponse:
+    async def _stream_with_fallback(self, prepared: _PreparedRequest) -> ModelResponse:
         """Stream on the subscription, falling back to the API key on exhaustion."""
+        handler = prepared.handler
         try:
-            return self._stream_model_response_with_retry(
-                primary_model,
-                model_messages,
-                primary_settings,
-                request_parameters,
+            return await self._stream_model_response_with_retry(
+                prepared.model_target,
+                prepared.messages,
+                prepared.model_settings,
+                prepared.request_parameters,
                 handler,
             )
         except ModelHTTPError:
             if (
-                api_fallback is None
+                prepared.api_fallback is None
                 or handler.has_visible_output()
                 or not codex_auth.is_exhausted()
             ):
                 raise
-            if not options.silent:
+            if not prepared.options.silent:
                 until = time.strftime(
                     "%H:%M", time.localtime(codex_auth.exhausted_until())
                 )
-                print(
-                    ansi_message(
-                        INFO_LABEL,
-                        "ChatGPT subscription limit reached — "
-                        f"using your API key until {until}.",
-                    )
+                _notify(
+                    prepared.options,
+                    "ChatGPT subscription limit reached — "
+                    f"using your API key until {until}.",
                 )
-            api_model, api_settings = api_fallback
-            return self._stream_model_response_with_retry(
+            api_model, api_settings = prepared.api_fallback
+            return await self._stream_model_response_with_retry(
                 api_model,
-                model_messages,
+                prepared.messages,
                 api_settings,
-                request_parameters,
+                prepared.request_parameters,
                 handler,
             )
 
-    def _stream_model_response_with_retry(
+    async def _stream_model_response_with_retry(
         self,
         model: Model | str,
         model_messages: list[ModelMessage],
@@ -305,14 +382,12 @@ class LLMClient:
         """Retry transient failures only before any streamed output is shown."""
         for attempt in range(1, MAX_CHAT_ATTEMPTS + 1):
             try:
-                return asyncio.run(
-                    self._stream_model_response(
-                        model,
-                        model_messages,
-                        model_settings,
-                        request_parameters,
-                        handler,
-                    )
+                return await self._stream_model_response(
+                    model,
+                    model_messages,
+                    model_settings,
+                    request_parameters,
+                    handler,
                 )
             except Exception:
                 # A subscription model (passed as an instance, not a string) that
@@ -322,7 +397,7 @@ class LLMClient:
                     raise
                 if attempt >= MAX_CHAT_ATTEMPTS or handler.has_visible_output():
                     raise
-                time.sleep(self._retry_wait_seconds(attempt))
+                await asyncio.sleep(self._retry_wait_seconds(attempt))
 
         raise RuntimeError("unreachable")
 

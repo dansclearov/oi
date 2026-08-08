@@ -34,11 +34,14 @@ class ResponseHandler:
         self,
         capabilities: ModelCapabilities,
         options: ChatOptions,
+        renderer: Optional[ResponseRenderer] = None,
     ):
         self.capabilities = capabilities
         self.options = options
 
-        self.renderer: ResponseRenderer = StyledRenderer(capabilities, options)
+        self.renderer: ResponseRenderer = (
+            renderer if renderer is not None else StyledRenderer(capabilities, options)
+        )
 
     def start_response(self) -> None:
         """Initialize the response rendering."""

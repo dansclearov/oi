@@ -1,7 +1,7 @@
 """Shared LLM-related data structures."""
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 
 @dataclass
@@ -26,6 +26,8 @@ class ChatOptions:
     show_assistant_label: bool = True
     assistant_label_text: str | None = None  # Override the "AI: " label text
     silent: bool = False  # Suppress all console output
+    notify: Callable[[str], None] | None = None
+    """Sink for out-of-band notices (billing fallback etc.); stdout when None."""
 
     extra_settings: dict[str, Any] = field(default_factory=dict)
     """Provider-specific overrides that can be attached to a request."""
