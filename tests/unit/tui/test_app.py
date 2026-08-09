@@ -377,6 +377,12 @@ def test_markdown_table_cells_have_no_tooltips(tmp_path):
     assert app._disable_tooltips
 
 
+def test_mouse_wheel_scrolls_one_line_per_event(tmp_path):
+    """Terminals send three wheel events per notch; one line each = 3 a notch."""
+    app, _, _ = _make_app(tmp_path)
+    assert app.scroll_sensitivity_y == 1.0
+
+
 def test_vim_toggle_reports_a_config_that_could_not_be_saved(tmp_path, monkeypatch):
     async def scenario():
         app, chat, ctx = _make_app(tmp_path)

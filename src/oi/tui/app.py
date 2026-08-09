@@ -637,6 +637,9 @@ class OiApp(App):
         # cell's own text; nothing in oi sets a tooltip worth showing, so the
         # Tooltip widget is kept off the screen entirely.
         self._disable_tooltips = True
+        # Per wheel *event*, and terminals send three per notch — one line each
+        # keeps a notch at the three lines a terminal scrolls by convention.
+        self.scroll_sensitivity_y = 1.0
         self._chat = current_chat
         self._ctx = ctx
         self._model_registry = registry

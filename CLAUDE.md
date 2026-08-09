@@ -350,7 +350,9 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   majors). `OiApp.__init__` sets `_disable_tooltips` (Textual private, also
   what `run_test` uses) so the `Tooltip` widget is never mounted: Textual
   gives every markdown table cell a tooltip repeating that cell's own text,
-  and oi sets no tooltips of its own.
+  and oi sets no tooltips of its own. `scroll_sensitivity_y` is dropped to
+  `1.0` there too: it counts lines per wheel *event* and terminals send three
+  events per notch, so Textual's default of 2 scrolls six lines a notch.
 - Tests drive the app headlessly via `app.run_test()` + a fake client
   (`tests/unit/tui/test_app.py`); `app.export_screenshot()` renders an SVG if
   you need to eyeball layout. `run_test` overrides `_disable_tooltips`, so
