@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-09
+
 ### Added
 
 - Full-screen TUI mode (built on Textual) that renders responses as
@@ -35,6 +37,11 @@ config/`models.yaml` format, alias names).
 - `--search` now also gives the model a web-fetch tool, so it can read a URL you
   paste instead of only searching for it. Applies to Anthropic and Gemini
   models; OpenAI and xAI already open pages from within their search tool.
+- Require `pydantic-ai>=2.24.0` (was `>=2.9.0`). It carries the fix for
+  GHSA-v2xh-2vp8-57h8, recognizes Claude Opus 5 — so the default `opus` alias
+  gets the newer web-search tool with dynamic filtering instead of the basic
+  variant — and handles Anthropic's `stop_reason=pause_turn`, which a
+  search-plus-fetch turn can hit.
 
 ### Fixed
 
@@ -232,7 +239,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dansclearov/oi/compare/v0.1.6...v0.2.0
 [0.1.6]: https://github.com/dansclearov/oi/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/dansclearov/oi/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/dansclearov/oi/compare/v0.1.3...v0.1.4

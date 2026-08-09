@@ -1,6 +1,6 @@
 [project]
 name = "oi-chat"
-version = "0.1.6"
+version = "0.2.0"
 description = "Command-line chat interface for multiple LLM providers, with streaming output, persistent chats, and YAML-based model aliases."
 readme = "README.md"
 authors = [
@@ -33,7 +33,7 @@ dependencies = [
     "rich>=14.0.0",
     "send2trash>=1.8.3",
     "prompt-toolkit>=3.0.51",
-    "pydantic-ai[groq,xai]>=2.9.0,<3.0",
+    "pydantic-ai[groq,xai]>=2.24.0,<3.0",
     "textual>=8.2.8,<9",
 ]
 

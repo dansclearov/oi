@@ -1552,7 +1552,7 @@ wheels = [
 
 [[package]]
 name = "oi-chat"
-version = "0.1.6"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -1583,7 +1583,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.84.0" },
     { name = "platformdirs", specifier = ">=4.3.8" },
     { name = "prompt-toolkit", specifier = ">=3.0.51" },
-    { name = "pydantic-ai", extras = ["groq", "xai"], specifier = ">=2.9.0,<3.0" },
+    { name = "pydantic-ai", extras = ["groq", "xai"], specifier = ">=2.24.0,<3.0" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "rich", specifier = ">=14.0.0" },
