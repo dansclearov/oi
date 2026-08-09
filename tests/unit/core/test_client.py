@@ -49,6 +49,42 @@ class TestLLMClient:
         assert effective.extra_settings == {"temperature": 0.2}
         assert effective.extra_settings is not options.extra_settings
 
+    def test_search_sends_both_web_tools(self):
+        """Fetching a URL rides along with --search; pydantic-ai drops the fetch
+        tool on models that fold page-opening into their search tool."""
+        client = LLMClient(Mock())
+        options = ChatOptions(enable_search=True)
+        capabilities = ModelCapabilities(supports_search=True)
+
+        params = client._build_request_parameters("anthropic", capabilities, options)
+
+        assert [type(tool).__name__ for tool in params.native_tools] == [
+            "WebSearchTool",
+            "WebFetchTool",
+        ]
+        assert params.native_tools[1].optional is True
+
+    @pytest.mark.parametrize(
+        "provider,supports_search,enable_search",
+        [
+            ("deepseek", True, True),  # provider has no builtin search
+            ("anthropic", False, True),  # model can't search
+            ("anthropic", True, False),  # --search not passed
+        ],
+    )
+    def test_no_web_tools_without_search(
+        self, provider, supports_search, enable_search
+    ):
+        client = LLMClient(Mock())
+
+        params = client._build_request_parameters(
+            provider,
+            ModelCapabilities(supports_search=supports_search),
+            ChatOptions(enable_search=enable_search),
+        )
+
+        assert params.native_tools == []
+
     def test_stream_model_response_with_retry_retries_before_output(self, monkeypatch):
         client = LLMClient(Mock())
         handler = Mock()

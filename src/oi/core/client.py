@@ -8,7 +8,7 @@ from typing import Callable, Optional, Sequence
 
 from pydantic_ai.direct import model_request_stream
 from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.native_tools import WebSearchTool
+from pydantic_ai.native_tools import WebFetchTool, WebSearchTool
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
@@ -467,5 +467,9 @@ class LLMClient:
             and provider_name in self._BUILTIN_SEARCH_PROVIDERS
         ):
             native_tools.append(WebSearchTool())
+            # Anthropic and Google put reading a specific URL in a separate
+            # tool; OpenAI's and xAI's web search opens pages itself. `optional`
+            # lets pydantic-ai drop this on the models that don't take one.
+            native_tools.append(WebFetchTool(optional=True))
 
         return ModelRequestParameters(native_tools=native_tools)

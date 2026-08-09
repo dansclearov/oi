@@ -136,6 +136,7 @@ class ResponseHandler:
             return False
         return tool_name in {
             "web_search",
+            "web_fetch",
             "code_execution",
             "url_context",
             "image_generation",

@@ -10,7 +10,8 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
 - Fast model switching via aliases like `sonnet`, `gpt`, `gemini-pro`.
 - Chat history with resume/continue flows and an interactive selector that can search, preview, and open chats in your editor (`$EDITOR`).
 - Chat bookmarks with `/bookmark` in-chat plus bookmark/filter controls in the selector.
-- Optional search and thinking traces when the selected model supports them.
+- Optional web search and thinking traces when the selected model supports them.
+  `--search` also lets the model read a URL you give it.
 - Optional full-screen TUI mode (`--tui`, or `"tui": true` in `config.json`)
   that renders responses as live-streamed markdown.
 - Paste images with `Alt+V` on vision-capable models.

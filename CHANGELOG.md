@@ -32,6 +32,9 @@ config/`models.yaml` format, alias names).
 
 - The `gemini-flash` alias now points to Gemini 3.6 Flash (`gemini-3.6-flash`),
   replacing Gemini 3.5 Flash.
+- `--search` now also gives the model a web-fetch tool, so it can read a URL you
+  paste instead of only searching for it. Applies to Anthropic and Gemini
+  models; OpenAI and xAI already open pages from within their search tool.
 
 ### Fixed
 
