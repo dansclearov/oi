@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import Mock
 
 from pydantic_ai.messages import ModelResponse, TextPart
+from textual.events import Key
 from textual.widgets import Markdown
 
 from oi.app import ChatLoopContext
@@ -11,6 +12,8 @@ from oi.config.settings import Config
 from oi.core.chat_manager import ChatManager
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.tui.app import ChatInput, OiApp, ResponseView
+from oi.tui.slash_menu import SlashMenu
+from oi.tui.vim import Mode as VimMode
 from oi.tui.renderer import ResponseStarted, TextDelta, ThinkingDelta, TuiRenderer
 
 RESPONSE_MD = "# Title\n\nHello **world**\n\n- one\n- two"
@@ -366,6 +369,84 @@ class TestCtrlC:
                 assert app.is_running
 
         asyncio.run(scenario())
+
+
+def test_markdown_table_cells_have_no_tooltips(tmp_path):
+    """`run_test` forces tooltips off, so assert the app's own setting."""
+    app, _, _ = _make_app(tmp_path)
+    assert app._disable_tooltips
+
+
+def test_vim_toggle_reports_a_config_that_could_not_be_saved(tmp_path, monkeypatch):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        monkeypatch.setattr(
+            "oi.tui.app.update_user_config",
+            Mock(side_effect=OSError("Read-only file system")),
+        )
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.insert("/vim")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            # Vim still turns on for the session; the notice says it is unsaved.
+            assert chat_input.vim is not None
+            warnings = app.query(".warning-label")
+            assert list(warnings), "expected a warning about the unsaved config"
+
+    asyncio.run(scenario())
+
+
+def test_escape_leaves_insert_before_the_keys_typed_behind_it(tmp_path):
+    """Esc + command in one burst runs the command, not inserts it."""
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        ctx.config.vim_mode = True
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.insert("hello world")
+            await pilot.pause()
+            assert chat_input.vim is not None
+
+            # Queued together, as a fast typist's keystrokes arrive: the mode
+            # change must be visible to the keys behind Esc.
+            chat_input.post_message(Key("escape", None))
+            chat_input.post_message(Key("d", "d"))
+            chat_input.post_message(Key("d", "d"))
+            await pilot.pause()
+            await pilot.pause()
+
+            assert chat_input.vim.mode is VimMode.NORMAL
+            assert chat_input.text == ""
+
+    asyncio.run(scenario())
+
+
+def test_escape_prefers_the_slash_menu_then_vim(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        ctx.config.vim_mode = True
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.insert("/vi")
+            await pilot.pause()
+            menu = app.query_one(SlashMenu)
+            assert menu.is_open
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not menu.is_open
+            # The menu ate this Esc; vim stays in insert.
+            assert chat_input.vim is not None
+            assert chat_input.vim.mode is VimMode.INSERT
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert chat_input.vim.mode is VimMode.NORMAL
+
+    asyncio.run(scenario())
 
 
 def test_cursor_cannot_rest_inside_a_marker(tmp_path):

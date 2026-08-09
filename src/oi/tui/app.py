@@ -44,6 +44,7 @@ from oi.app import (
     _billing_tag,
     _maybe_generate_smart_title,
     _update_title_from_first_user_message,
+    vim_mode_not_saved_message,
 )
 from oi.config.settings import update_user_config
 from oi.core.message_utils import flatten_history, latest_system_prompt
@@ -228,7 +229,6 @@ class ChatInput(TextArea):
         "tab": "complete",
         "ctrl+n": "down",
         "ctrl+p": "up",
-        "escape": "dismiss",
     }
 
     class VimModeChanged(Message):
@@ -275,6 +275,10 @@ class ChatInput(TextArea):
             return False
         return self.vim.handle_escape()
 
+    @property
+    def _menu_is_open(self) -> bool:
+        return self.screen.query_one(SlashMenu).is_open
+
     async def _on_key(self, event) -> None:
         if event.key == "enter":
             event.stop()
@@ -286,6 +290,17 @@ class ChatInput(TextArea):
             event.prevent_default()
             start, end = self.selection
             self._replace_via_keyboard("\n", start, end)
+            return
+        if event.key == "escape":
+            event.stop()
+            event.prevent_default()
+            # Decided here rather than in the app: a mode change routed through
+            # the app's message queue lands *after* the keys typed right behind
+            # Esc, so those keys would run as insert-mode text.
+            if self._menu_is_open:
+                self.post_message(self.MenuKey("dismiss"))
+            elif not self.vim_escape():
+                self.post_message(self.MenuKey("interrupt"))
             return
         if event.key in self._MENU_KEYS:
             event.stop()
@@ -618,6 +633,10 @@ class OiApp(App):
     ) -> None:
         super().__init__()
         self.theme = "ansi-dark"
+        # Textual tags every markdown table cell with a tooltip repeating the
+        # cell's own text; nothing in oi sets a tooltip worth showing, so the
+        # Tooltip widget is kept off the screen entirely.
+        self._disable_tooltips = True
         self._chat = current_chat
         self._ctx = ctx
         self._model_registry = registry
@@ -815,10 +834,16 @@ class OiApp(App):
 
         if command_name == "/vim":
             self._ctx.config.vim_mode = not self._ctx.config.vim_mode
-            update_user_config("vim_mode", self._ctx.config.vim_mode)
             self.query_one(ChatInput).set_vim_enabled(self._ctx.config.vim_mode)
             status = "enabled" if self._ctx.config.vim_mode else "disabled"
-            await self._mount_notice(INFO_LABEL, f"Vim mode {status}.")
+            try:
+                update_user_config("vim_mode", self._ctx.config.vim_mode)
+            except OSError as e:
+                await self._mount_notice(
+                    WARNING_LABEL, vim_mode_not_saved_message(status, e)
+                )
+            else:
+                await self._mount_notice(INFO_LABEL, f"Vim mode {status}.")
             return
 
         if command_name == "/bookmark":
@@ -848,12 +873,10 @@ class OiApp(App):
     async def _on_menu_key(self, message: ChatInput.MenuKey) -> None:
         menu = self.query_one(SlashMenu)
         if message.action == "dismiss":
-            if menu.is_open:
-                await menu.update_filter(None)
-            elif self.query_one(ChatInput).vim_escape():
-                pass
-            else:
-                self.action_interrupt()
+            await menu.update_filter(None)
+            return
+        if message.action == "interrupt":
+            self.action_interrupt()
             return
         if message.action in ("up", "down"):
             menu.move(-1 if message.action == "up" else 1)

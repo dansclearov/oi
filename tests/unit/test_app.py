@@ -269,6 +269,31 @@ def test_handle_local_command_rejects_unknown_slash_command(capsys):
     )
 
 
+def test_vim_toggle_reports_a_config_that_could_not_be_saved(capsys, monkeypatch):
+    metadata = ChatMetadata(
+        id="test-chat-vim",
+        title="New chat",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        model="sonnet",
+        message_count=0,
+    )
+    monkeypatch.setattr(
+        "oi.app.update_user_config",
+        Mock(side_effect=OSError("Read-only file system")),
+    )
+    ctx = _make_ctx(config=Config(vim_mode=False))
+
+    handled = _handle_local_command("/vim", ctx, Chat(metadata=metadata))
+
+    assert handled is True
+    # The session still gets vim mode; only the persistence is reported failed.
+    assert ctx.config.vim_mode is True
+    out = capsys.readouterr().out
+    assert "Vim mode enabled for this session" in out
+    assert "Read-only file system" in out
+
+
 def test_btw_runs_side_question_without_mutating_history():
     metadata = ChatMetadata(
         id="test-chat-btw",

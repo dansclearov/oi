@@ -218,6 +218,11 @@ def _print_chat_session_context(
     print_all_messages(current_chat.messages)
 
 
+def vim_mode_not_saved_message(status: str, error: OSError) -> str:
+    """The toggle still applies to this session; only persistence failed."""
+    return f"Vim mode {status} for this session — could not save config: {error}"
+
+
 def _handle_local_command(
     normalized_input: str,
     ctx: "ChatLoopContext",
@@ -253,9 +258,13 @@ def _handle_local_command(
 
     if command_name == "/vim":
         ctx.config.vim_mode = not ctx.config.vim_mode
-        update_user_config("vim_mode", ctx.config.vim_mode)
         status = "enabled" if ctx.config.vim_mode else "disabled"
-        print(ansi_message(INFO_LABEL, f"Vim mode {status}."))
+        try:
+            update_user_config("vim_mode", ctx.config.vim_mode)
+        except OSError as e:
+            print(ansi_message(WARNING_LABEL, vim_mode_not_saved_message(status, e)))
+        else:
+            print(ansi_message(INFO_LABEL, f"Vim mode {status}."))
         return True
 
     if command_name == "/bookmark":

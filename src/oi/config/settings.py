@@ -2,6 +2,7 @@
 
 import json
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -41,19 +42,37 @@ def load_user_config() -> dict[str, Any]:
 
 
 def save_user_config(config_data: dict[str, Any]) -> None:
-    """Save user configuration to file."""
+    """Save user configuration, swapping the file in whole.
+
+    Truncating in place would let a concurrent reader (or a crash mid-write)
+    see a partial file, which `load_user_config` reads back as `{}` — every
+    setting silently reverted to its default.
+
+    Raises `OSError` if the config can't be written; callers say so rather
+    than reporting a setting as saved when it wasn't.
+    """
     config_path = get_user_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
+    fd, name = tempfile.mkstemp(dir=config_path.parent, suffix=".tmp")
+    tmp_path = Path(name)
     try:
-        with open(config_path, "w") as f:
+        with os.fdopen(fd, "w") as f:
             json.dump(config_data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        if config_path.exists():
+            os.chmod(tmp_path, config_path.stat().st_mode & 0o777)
+        else:
+            os.chmod(tmp_path, 0o644)
+        os.replace(tmp_path, config_path)
     except OSError:
-        pass
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def update_user_config(key: str, value: Any) -> None:
-    """Update a specific key in the user configuration."""
+    """Update a specific key in the user configuration. Raises `OSError`."""
     config = load_user_config()
     config[key] = value
     save_user_config(config)

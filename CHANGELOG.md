@@ -38,6 +38,11 @@ config/`models.yaml` format, alias names).
 - Interrupting or failing the first turn of a new chat no longer loses the
   system prompt: discarding the pending user message now restores the prompt,
   so the next message carries it again.
+- `config.json` is now written atomically, so a crash or a second `oi` session
+  reading mid-write can no longer leave settings (`vim_mode`, `tui`,
+  `default_prompt`) silently reverted to their defaults. A config that can't
+  be written (read-only home, full disk) is now reported instead of swallowed:
+  `/vim` says the toggle applies to the session only.
 
 ## [0.1.6] - 2026-07-24
 

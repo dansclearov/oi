@@ -67,20 +67,16 @@ class TestObjects:
 
 
 def _make_input():
-    from textual import on
     from textual.app import App
 
     from oi.tui.app import ChatInput
+    from oi.tui.slash_menu import SlashMenu
 
     class Harness(App):
+        # The menu is a sibling in OiApp too: the input consults it on Esc.
         def compose(self):
+            yield SlashMenu()
             yield ChatInput()
-
-        # Mirror OiApp's escape routing (menu closed -> vim layer).
-        @on(ChatInput.MenuKey)
-        def _on_menu_key(self, message: ChatInput.MenuKey) -> None:
-            if message.action == "dismiss":
-                self.query_one(ChatInput).vim_escape()
 
     return Harness()
 
@@ -357,17 +353,14 @@ def test_mode_changes_are_reported():
         from textual.app import App
 
         from oi.tui.app import ChatInput
+        from oi.tui.slash_menu import SlashMenu
 
         seen: list[Mode | None] = []
 
         class Harness(App):
             def compose(self):
+                yield SlashMenu()
                 yield ChatInput()
-
-            @on(ChatInput.MenuKey)
-            def _on_menu_key(self, message: ChatInput.MenuKey) -> None:
-                if message.action == "dismiss":
-                    self.query_one(ChatInput).vim_escape()
 
             @on(ChatInput.VimModeChanged)
             def _on_mode(self, message: ChatInput.VimModeChanged) -> None:
