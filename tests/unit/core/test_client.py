@@ -1,9 +1,11 @@
 import asyncio
+import time
 
 import pytest
 from unittest.mock import Mock
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.models import Model
 
 from oi.core.client import LLMClient, _PreparedRequest, subscription_billing_active
 from oi.llm_types import ChatOptions, ModelCapabilities
@@ -311,6 +313,52 @@ class TestSubscriptionBillingActive:
         monkeypatch.setattr("oi.core.client.codex_auth.is_logged_in", lambda: True)
         monkeypatch.setenv("OI_NO_SUBSCRIPTION", "1")
         assert subscription_billing_active(registry, sub_model) is False
+
+
+class TestResolveModel:
+    """Building a model imports the provider SDK — it must not run on the loop."""
+
+    def test_builds_off_the_loop_and_caches_per_loop(self, monkeypatch):
+        client = LLMClient(Mock())
+        built = []
+
+        def slow_infer_model(target):
+            time.sleep(0.05)
+            built.append(target)
+            return Mock(spec=Model)
+
+        monkeypatch.setattr("oi.core.client.infer_model", slow_infer_model)
+
+        async def resolve_while_ticking():
+            ticks = 0
+
+            async def tick():
+                nonlocal ticks
+                while True:
+                    ticks += 1
+                    await asyncio.sleep(0.001)
+
+            ticker = asyncio.create_task(tick())
+            first = await client._resolve_model("anthropic:claude-x")
+            second = await client._resolve_model("anthropic:claude-x")
+            ticker.cancel()
+            return first, second, ticks
+
+        first, second, ticks = asyncio.run(resolve_while_ticking())
+
+        assert built == ["anthropic:claude-x"], "model rebuilt on the second turn"
+        assert first is second
+        assert ticks > 1, "the event loop was blocked while the model was built"
+
+        # A second loop can't reuse a client bound to the first one.
+        asyncio.run(client._resolve_model("anthropic:claude-x"))
+        assert built == ["anthropic:claude-x"] * 2
+
+    def test_passes_model_instances_through(self):
+        client = LLMClient(Mock())
+        model = Mock(spec=Model)
+
+        assert asyncio.run(client._resolve_model(model)) is model
 
 
 class TestSubscriptionFallback:

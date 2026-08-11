@@ -696,7 +696,10 @@ class OiApp(App):
         if self._hint_timer is not None:
             self._hint_timer.stop()
             self._hint_timer = None
-        self.query_one("#hint", Static).update(Text(text))
+        # layout=False: the hint is a fixed-height row, and Textual's layout
+        # pass walks every widget in the log — so the default would relayout
+        # the whole conversation to rewrite one line.
+        self.query_one("#hint", Static).update(Text(text), layout=False)
 
     def _refresh_hint(self) -> None:
         """Show the hint the current state calls for.
@@ -768,10 +771,6 @@ class OiApp(App):
     async def _mount_notice(self, label: LabelStyle, text: str) -> None:
         await self._chat_log.mount(_notice_widget(label, text))
 
-    def _mount_notice_nowait(self, label: LabelStyle, text: str) -> None:
-        """Schedule a notice row without awaiting the mount (same-frame path)."""
-        self._chat_log.mount(_notice_widget(label, text))
-
     # --- input ----------------------------------------------------------
 
     @on(ChatInput.Submitted)
@@ -780,7 +779,9 @@ class OiApp(App):
         input_widget = self.query_one(ChatInput)
         if not text:
             return
-        if self._turn_worker is not None and self._turn_worker.is_running:
+        # `_turn_active` rather than the worker: it is set synchronously here,
+        # and the worker only starts a frame later.
+        if self._turn_active:
             return
 
         parsed_command = parse_local_command(text)
@@ -788,12 +789,15 @@ class OiApp(App):
         # marker registry down to nothing).
         content = None if parsed_command else input_widget.consume_content(text)
 
-        # Clear the input and queue the echoed row without awaiting in
-        # between, so both land in the same frame (no vanish-then-reappear).
-        input_widget.clear()
-        input_widget.vim_reset()
-        input_widget.sync_height()
-        self._mount_notice_nowait(USER_LABEL, text)
+        # Hold the paint until the echoed row is actually mounted, so the
+        # input clearing and the row appearing are one frame. Mounting takes a
+        # refresh cycle of its own, so without the batch the input empties a
+        # frame (plus a full relayout) before the message shows up.
+        with self.batch_update():
+            input_widget.clear()
+            input_widget.vim_reset()
+            input_widget.sync_height()
+            await self._mount_notice(USER_LABEL, text)
 
         if parsed_command is not None:
             command_name, command_args = parsed_command
@@ -801,10 +805,17 @@ class OiApp(App):
             return
 
         assert content is not None
-        self._turn_worker = self.run_worker(self._run_turn(content), exclusive=True)
         self._exit_armed_at = None
         self._turn_active = True
         self._refresh_hint()
+        # Starting the turn blocks the event loop for as long as pydantic-ai
+        # takes to build the model — hundreds of ms on the first turn of a run,
+        # when it also imports the provider SDK. Wait for the echoed row to be
+        # on screen before paying that, or the message looks stuck in the input.
+        self.call_after_refresh(self._start_turn, content)
+
+    def _start_turn(self, content: UserContentInput) -> None:
+        self._turn_worker = self.run_worker(self._run_turn(content), exclusive=True)
 
     async def _handle_local_command(self, command_name: str, command_args: str) -> None:
         if command_name not in LOCAL_COMMANDS:

@@ -10,7 +10,7 @@ from pydantic_ai.direct import model_request_stream
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.native_tools import WebFetchTool, WebSearchTool
 from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models import Model, ModelRequestParameters
+from pydantic_ai.models import Model, ModelRequestParameters, infer_model
 from pydantic_ai.settings import ModelSettings
 
 from oi.core import codex_auth
@@ -91,6 +91,7 @@ class LLMClient:
     def __init__(self, registry: ModelRegistry):
         self.registry = registry
         self.interrupt_handler = None
+        self._model_cache: dict[str, tuple[asyncio.AbstractEventLoop, Model]] = {}
 
     def chat(
         self,
@@ -335,6 +336,27 @@ class LLMClient:
         )
         return OpenAIResponsesModel(provider_model_id, provider=provider)
 
+    async def _resolve_model(self, target: Model | str) -> Model:
+        """Build the pydantic-ai model for a turn, off the event loop.
+
+        `infer_model` imports the provider SDK and constructs an HTTP client:
+        a few hundred ms on the first turn of a run, tens of ms after. On the
+        async path that runs on the frontend's loop, freezing the UI, so it
+        goes to a thread. The cache is keyed by the loop that built the model
+        because the HTTP client binds to it — the sync entry point runs each
+        turn on a fresh loop, so it simply rebuilds. A long-lived loop (the
+        TUI) reuses the model, which keeps its connection warm between turns.
+        """
+        if isinstance(target, Model):
+            return target
+        loop = asyncio.get_running_loop()
+        cached = self._model_cache.get(target)
+        if cached is not None and cached[0] is loop:
+            return cached[1]
+        model = await asyncio.to_thread(infer_model, target)
+        self._model_cache[target] = (loop, model)
+        return model
+
     async def _stream_with_fallback(self, prepared: _PreparedRequest) -> ModelResponse:
         """Stream on the subscription, falling back to the API key on exhaustion."""
         handler = prepared.handler
@@ -416,7 +438,7 @@ class LLMClient:
     ) -> ModelResponse:
         """Stream model events via the async API and return the final response."""
         async with model_request_stream(
-            model=model,
+            model=await self._resolve_model(model),
             messages=model_messages,
             model_settings=model_settings,
             model_request_parameters=request_parameters,

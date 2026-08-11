@@ -268,12 +268,25 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   handlers mount widgets and feed the stream — the FIFO message queue
   preserves delta order. The worker posts `TurnFinished` after `chat_async`
   returns (all paths), which stops the stream; on cancellation it discards the
-  pending user message first (Ctrl+C parity with the CLI loop).
-- **Flicker discipline**: the submit path queues the input-clear and the
-  echoed row without awaiting between them (one frame, no vanish/reappear —
-  don't reintroduce `batch_update` there), and `ChatInput.sync_height` writes
+  pending user message first (Ctrl+C parity with the CLI loop). The worker is
+  started from `call_after_refresh`, not inline: `chat_async`'s first step is
+  synchronous and can block the loop for a while (see `_resolve_model`), which
+  before the paint means the message looks stuck in the input. Re-entrancy is
+  guarded on `_turn_active` (set synchronously at submit) rather than on
+  `_turn_worker`, which only exists a frame later.
+- **Flicker discipline**: the submit path clears the input and mounts the
+  echoed row inside one `batch_update`, awaiting the mount — mounting costs a
+  refresh cycle of its own, so an unbatched submit paints the emptied input
+  one relayout before the message shows up. `ChatInput.sync_height` writes
   `styles.height` only when the value changes because height is a
   layout-invalidating property (a write per keystroke relayouts the screen).
+  Textual's layout pass (`Screen._refresh_layout` → `Compositor.reflow`) walks
+  *every* widget in the tree, not just visible ones, so its cost scales with
+  the whole conversation (~15ms at 10 turns, ~70ms at 100) and each avoidable
+  relayout is felt: hint updates pass `layout=False` for that reason, and
+  `tests/unit/tui/test_app.py` asserts the submit is one paint by sampling
+  `Compositor.visible_widgets` per frame (`mount()` registers a widget
+  immediately, so a DOM query can't tell a laid-out row from a pending one).
 - **Interrupt = worker cancellation**: Ctrl+C (priority binding, so it
   pre-empts Textual's own `ctrl+c` → `screen.copy_text`) forks in
   `action_interrupt_or_quit`: cancel the turn worker while streaming, else
@@ -359,6 +372,19 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   (`tests/unit/tui/test_app.py`); `app.export_screenshot()` renders an SVG if
   you need to eyeball layout. `run_test` overrides `_disable_tooltips`, so
   tooltip behavior can only be asserted on an app that isn't running.
+
+**Model Construction (`client.py:_resolve_model`):**
+- pydantic-ai's `infer_model()` imports the provider SDK and builds an HTTP
+  client — ~300ms on the first turn of a run, tens of ms after — and it runs
+  synchronously inside `model_request_stream`. `_stream_model_response`
+  therefore resolves the model itself, in `asyncio.to_thread`, so the TUI's
+  event loop keeps painting while it happens.
+- Resolved models are cached **per event loop**, because the HTTP client binds
+  to the loop that used it: `chat()` runs each turn on its own `asyncio.run`
+  loop and so rebuilds every time, while the TUI's long-lived loop reuses the
+  model and keeps its connection warm between turns. Never make the cache
+  loop-agnostic. Subscription models are already `Model` instances and pass
+  through untouched (they must stay per-turn — the access token can refresh).
 
 **Streaming & Output:**
 - `StyledRenderer` is the scrollback renderer — styled thinking traces, NOT markdown rendering (markdown is TUI-only); `ResponseHandler` accepts an injected renderer (the TUI passes `TuiRenderer` via `chat_async`'s `renderer_factory`)

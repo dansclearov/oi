@@ -145,6 +145,84 @@ def test_assistant_marker_waits_for_the_first_output(tmp_path):
     asyncio.run(scenario())
 
 
+def test_input_is_never_empty_before_the_echoed_row_exists(tmp_path):
+    """Clearing the input and echoing the message are one frame.
+
+    Mounting costs a refresh cycle of its own, so an unbatched submit paints
+    the emptied input first and the message a relayout later — visible as a
+    stutter between typing and the message landing in the conversation.
+    """
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            screen = app.screen
+            painted: list[tuple[bool, bool]] = []
+            compositor_refresh = screen._compositor_refresh
+
+            def record_frame() -> None:
+                compositor_refresh()
+                # Laid out, not merely mounted: `mount()` registers the widget
+                # straight away, so only the compositor knows what was shown.
+                echoed = any(
+                    "hello there" in str(widget.render())
+                    for widget in screen._compositor.visible_widgets
+                    if widget.has_class("content")
+                )
+                painted.append((chat_input.text == "", echoed))
+
+            screen._compositor_refresh = record_frame
+
+            chat_input.insert("hello there")
+            await pilot.pause()
+            painted.clear()
+
+            await pilot.press("enter")
+            await pilot.pause()
+            await pilot.pause()
+
+            assert painted, "no frame was painted for the submit"
+            assert (True, False) not in painted, (
+                "a frame showed an emptied input before the message was echoed"
+            )
+            assert (True, True) in painted
+
+    asyncio.run(scenario())
+
+
+def test_the_turn_starts_only_once_the_message_is_on_screen(tmp_path):
+    """Starting a turn blocks the loop while pydantic-ai builds the model."""
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        painted_when_called: list[bool] = []
+
+        async def chat_async(messages, model_name_or_alias, options=None, **kwargs):
+            painted_when_called.append(
+                any(
+                    "hello there" in str(widget.render())
+                    for widget in app.screen._compositor.visible_widgets
+                    if widget.has_class("content")
+                )
+            )
+            return ModelResponse(parts=[TextPart(content="ok")])
+
+        ctx.llm_client.chat_async = chat_async
+
+        async with app.run_test() as pilot:
+            app.query_one(ChatInput).insert("hello there")
+            await pilot.press("enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+
+            assert painted_when_called == [True], (
+                "the turn began before the message had been painted"
+            )
+
+    asyncio.run(scenario())
+
+
 def test_slash_command_is_not_sent_to_model(tmp_path):
     async def scenario():
         app, chat, ctx = _make_app(tmp_path)

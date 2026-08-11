@@ -15,6 +15,17 @@ config/`models.yaml` format, alias names).
   no longer needs a hand-edited config or `--tui` on every run. Available from
   both frontends; applies on the next launch.
 
+### Fixed
+
+- TUI: sending a message no longer stutters. Pressing Enter waited on building
+  the model for the turn — a few hundred ms on the first message of a run,
+  while the provider SDK is imported — and then took three screen repaints,
+  each a full relayout of the conversation, so the input emptied and the
+  message appeared separately. The message is now echoed immediately and in a
+  single repaint.
+- Models are built off the event loop and reused across turns, so the UI stays
+  responsive while a turn starts and requests reuse a warm connection.
+
 ## [0.2.0] - 2026-08-09
 
 ### Added
