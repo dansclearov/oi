@@ -8,7 +8,7 @@ from textual.events import Key
 from textual.widgets import Markdown
 
 from oi.app import ChatLoopContext
-from oi.config.settings import Config
+from oi.config.settings import Config, load_user_config
 from oi.core.chat_manager import ChatManager
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.tui.app import ChatInput, OiApp, ResponseView
@@ -387,7 +387,7 @@ def test_vim_toggle_reports_a_config_that_could_not_be_saved(tmp_path, monkeypat
     async def scenario():
         app, chat, ctx = _make_app(tmp_path)
         monkeypatch.setattr(
-            "oi.tui.app.update_user_config",
+            "oi.app.update_user_config",
             Mock(side_effect=OSError("Read-only file system")),
         )
         async with app.run_test() as pilot:
@@ -400,6 +400,25 @@ def test_vim_toggle_reports_a_config_that_could_not_be_saved(tmp_path, monkeypat
             assert chat_input.vim is not None
             warnings = app.query(".warning-label")
             assert list(warnings), "expected a warning about the unsaved config"
+
+    asyncio.run(scenario())
+
+
+def test_tui_toggle_persists_the_setting(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        ctx.config.tui = True
+        async with app.run_test() as pilot:
+            app.query_one(ChatInput).insert("/tui")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert ctx.config.tui is False
+            assert load_user_config()["tui"] is False
+            assert list(app.query(".info-label")), "expected a /tui notice"
+
+        assert ctx.llm_client.calls == 0
+        assert chat.messages == []
 
     asyncio.run(scenario())
 

@@ -12,7 +12,7 @@ from oi.app import (
     handle_chat_selection,
     run_chat_loop,
 )
-from oi.config.settings import Config
+from oi.config.settings import Config, load_user_config
 from oi.core.session import Chat, ChatMetadata
 from oi.exceptions import ChatNotFoundError
 from oi.llm_types import ChatOptions, ModelCapabilities
@@ -292,6 +292,25 @@ def test_vim_toggle_reports_a_config_that_could_not_be_saved(capsys, monkeypatch
     out = capsys.readouterr().out
     assert "Vim mode enabled for this session" in out
     assert "Read-only file system" in out
+
+
+def test_tui_toggle_persists_the_setting(capsys):
+    metadata = ChatMetadata(
+        id="test-chat-tui",
+        title="New chat",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        model="sonnet",
+        message_count=0,
+    )
+    ctx = _make_ctx(config=Config(tui=False))
+
+    handled = _handle_local_command("/tui", ctx, Chat(metadata=metadata))
+
+    assert handled is True
+    assert ctx.config.tui is True
+    assert load_user_config()["tui"] is True
+    assert "TUI mode enabled" in capsys.readouterr().out
 
 
 def test_btw_runs_side_question_without_mutating_history():

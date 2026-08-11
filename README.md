@@ -85,6 +85,7 @@ oi -c --ephemeral -p "probe an existing chat without dirtying it"
 /btw <question>   # one-off question with full context, not saved to the chat
 /bookmark
 /vim
+/tui
 
 # Slash commands complete with Tab
 

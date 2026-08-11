@@ -9,6 +9,12 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- `/tui` toggles full-screen TUI mode and persists it to `config.json`, so it
+  no longer needs a hand-edited config or `--tui` on every run. Available from
+  both frontends; applies on the next launch.
+
 ## [0.2.0] - 2026-08-09
 
 ### Added

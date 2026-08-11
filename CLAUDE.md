@@ -250,8 +250,10 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 
 **TUI Mode (`src/oi/tui/`, off by default):**
 - Enabled per run with `--tui` or persistently via `"tui": true` in
-  `config.json` (`Config.tui`). `main()` branches to `tui.app:run_tui` for the
-  interactive chat path only — headless (`-p`), `stats`, `docs`, `auth`, and
+  `config.json` (`Config.tui`) — the `/tui` slash command writes that key from
+  either frontend, so it applies on the next launch, not mid-session (unlike
+  `/vim`, which also takes effect immediately). `main()` branches to
+  `tui.app:run_tui` for the interactive chat path only — headless (`-p`), `stats`, `docs`, `auth`, and
   the pre-launch chat selector are unchanged. The import is deferred so the
   scrollback path never pays for textual.
 - The win over scrollback: assistant text renders as **live-streamed markdown**
@@ -377,6 +379,12 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - `InputHandler` wires slash command completion through prompt-toolkit
 - Slash command completion uses `CompleteStyle.READLINE_LIKE`, so completion is `Tab`-triggered and rendered in a readline-like way instead of a dropdown menu
 - Unknown slash commands are still rejected in `app.py` after submit so they never get sent to the model
+- **`/vim` and `/tui`** are pure config toggles, driven by the `TOGGLE_SETTINGS`
+  table + `toggle_setting()` in `app.py` (shared by both frontends; the TUI's
+  handler only adds the live `set_vim_enabled` call). A `ToggleSetting.key` is
+  both the `Config` attribute and the `config.json` key, so adding a toggle is
+  one table entry plus a `LocalCommandSpec`. On a failed write the setting still
+  applies to the session and the notice says so
 - **`/btw <question>`** is the one command that takes an argument and runs a full
   model turn. `_run_side_question` (`app.py`) streams a normal reply against a
   *copy* of `current_chat.messages` (plus the question, and the pending system

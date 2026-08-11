@@ -53,6 +53,7 @@ from oi.ui.labels import (
     BTW_AI_LABEL_TEXT,
     ERROR_LABEL,
     INFO_LABEL,
+    LabelStyle,
     SYSTEM_LABEL,
     USER_LABEL,
     WARNING_LABEL,
@@ -218,9 +219,39 @@ def _print_chat_session_context(
     print_all_messages(current_chat.messages)
 
 
-def vim_mode_not_saved_message(status: str, error: OSError) -> str:
-    """The toggle still applies to this session; only persistence failed."""
-    return f"Vim mode {status} for this session — could not save config: {error}"
+@dataclass(frozen=True)
+class ToggleSetting:
+    """A slash command that flips a persisted boolean config setting."""
+
+    key: str
+    """Both the `Config` attribute and the user-config JSON key."""
+    label: str
+    note: str = ""
+    """Appended to the success message."""
+
+
+TOGGLE_SETTINGS = {
+    "/vim": ToggleSetting(key="vim_mode", label="Vim mode"),
+    "/tui": ToggleSetting(
+        key="tui", label="TUI mode", note=" Takes effect on the next launch."
+    ),
+}
+
+
+def toggle_setting(setting: ToggleSetting, config: Config) -> tuple[LabelStyle, str]:
+    """Flip and persist a setting. Returns the notice label and message."""
+    enabled = not getattr(config, setting.key)
+    setattr(config, setting.key, enabled)
+    status = "enabled" if enabled else "disabled"
+    try:
+        update_user_config(setting.key, enabled)
+    except OSError as e:
+        # The toggle still applies to this session; only persistence failed.
+        return (
+            WARNING_LABEL,
+            f"{setting.label} {status} for this session — could not save config: {e}",
+        )
+    return INFO_LABEL, f"{setting.label} {status}.{setting.note}"
 
 
 def _handle_local_command(
@@ -256,15 +287,10 @@ def _handle_local_command(
         print(ansi_message(WARNING_LABEL, build_argument_error_message(command_name)))
         return True
 
-    if command_name == "/vim":
-        ctx.config.vim_mode = not ctx.config.vim_mode
-        status = "enabled" if ctx.config.vim_mode else "disabled"
-        try:
-            update_user_config("vim_mode", ctx.config.vim_mode)
-        except OSError as e:
-            print(ansi_message(WARNING_LABEL, vim_mode_not_saved_message(status, e)))
-        else:
-            print(ansi_message(INFO_LABEL, f"Vim mode {status}."))
+    setting = TOGGLE_SETTINGS.get(command_name)
+    if setting is not None:
+        label, message = toggle_setting(setting, ctx.config)
+        print(ansi_message(label, message))
         return True
 
     if command_name == "/bookmark":

@@ -40,13 +40,13 @@ from textual.worker import Worker
 # its helpers here can't create a cycle (oi.app never imports oi.tui at module
 # level).
 from oi.app import (
+    TOGGLE_SETTINGS,
     ChatLoopContext,
     _billing_tag,
     _maybe_generate_smart_title,
     _update_title_from_first_user_message,
-    vim_mode_not_saved_message,
+    toggle_setting,
 )
-from oi.config.settings import update_user_config
 from oi.core.message_utils import flatten_history, latest_system_prompt
 from oi.core.session import Chat
 from oi.llm_types import ModelCapabilities
@@ -835,18 +835,12 @@ class OiApp(App):
             )
             return
 
-        if command_name == "/vim":
-            self._ctx.config.vim_mode = not self._ctx.config.vim_mode
-            self.query_one(ChatInput).set_vim_enabled(self._ctx.config.vim_mode)
-            status = "enabled" if self._ctx.config.vim_mode else "disabled"
-            try:
-                update_user_config("vim_mode", self._ctx.config.vim_mode)
-            except OSError as e:
-                await self._mount_notice(
-                    WARNING_LABEL, vim_mode_not_saved_message(status, e)
-                )
-            else:
-                await self._mount_notice(INFO_LABEL, f"Vim mode {status}.")
+        setting = TOGGLE_SETTINGS.get(command_name)
+        if setting is not None:
+            label, message = toggle_setting(setting, self._ctx.config)
+            if setting.key == "vim_mode":
+                self.query_one(ChatInput).set_vim_enabled(self._ctx.config.vim_mode)
+            await self._mount_notice(label, message)
             return
 
         if command_name == "/bookmark":
