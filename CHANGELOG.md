@@ -14,6 +14,13 @@ config/`models.yaml` format, alias names).
 - `/tui` toggles full-screen TUI mode and persists it to `config.json`, so it
   no longer needs a hand-edited config or `--tui` on every run. Available from
   both frontends; applies on the next launch.
+- `--no-tui` runs the classic scrollback UI for one run, overriding
+  `"tui": true` in `config.json`.
+
+### Changed
+
+- TUI: pasted-image markers are styled as cyan pills, matching the scrollback
+  UI — while composing, in the sent message, and when replaying a chat.
 
 ### Fixed
 

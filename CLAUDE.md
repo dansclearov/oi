@@ -252,7 +252,9 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - Enabled per run with `--tui` or persistently via `"tui": true` in
   `config.json` (`Config.tui`) — the `/tui` slash command writes that key from
   either frontend, so it applies on the next launch, not mid-session (unlike
-  `/vim`, which also takes effect immediately). `main()` branches to
+  `/vim`, which also takes effect immediately). `--tui`/`--no-tui` are paired
+  flags over one dest defaulting to `None`, so "unset" stays distinguishable
+  from "off" and only then does `config.json` decide. `main()` branches to
   `tui.app:run_tui` for the interactive chat path only — headless (`-p`), `stats`, `docs`, `auth`, and
   the pre-launch chat selector are unchanged. The import is deferred so the
   scrollback path never pays for textual.
@@ -336,7 +338,13 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   hands `VimHandler` an `atom_spans` callback so vim treats them as single
   characters (`_expand_range` grows any clipping edit to cover them).
   `vim.py` stays image-agnostic — it only knows "atoms". No PUA sentinels in
-  the TUI.
+  the TUI. Markers render as cyan pills (`PILL_RICH_STYLE`, same look as the
+  scrollback `PillProcessor`): in the input via `ChatInput.get_line`, TextArea's
+  per-line styling hook, and in echoed/replayed messages via `_pill_text`.
+  Anything that stylizes whole cells *after* `get_line` would flatten that
+  color, so the cursor line and bracket matching are off and the painted cursor
+  is suppressed with a null `cursor_style` theme rather than neutral CSS (the
+  visible cursor is the terminal's own anyway).
 - **Vim mode**: `tui/vim.py` — `VimHandler`, a modal key dispatcher over
   TextArea primitives (document index/location conversion, selection, edit
   methods, undo stack); motions/text objects are pure `(text, index)`
@@ -351,8 +359,9 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   carries `None` when vim is off, which drives both the cursor shape and the
   hint line's `-- INSERT --`/`-- VISUAL --` indicator (nothing in normal
   mode, vim's own convention).
-- **Cursor**: the input uses the terminal's hardware cursor, not the painted
-  cell (which is hidden via `!important` CSS on `.text-area--cursor`).
+- **Cursor**: the input uses the terminal's hardware cursor; the painted cell
+  is never drawn (`_NO_CURSOR_THEME` gives `TextArea` an empty `cursor_style`,
+  which makes it skip the stylize entirely).
   Textual already keeps `app.cursor_position` at the TextArea cursor (IME
   support) and moves the terminal cursor there after every frame inside the
   synchronized update, so `OiApp` just shows it (`?25h`) and shapes it via

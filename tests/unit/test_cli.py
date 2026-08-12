@@ -123,3 +123,23 @@ def test_parse_arguments_stats_without_deep(monkeypatch):
 
     assert args.command == "stats"
     assert args.deep is False
+
+
+@pytest.mark.parametrize(
+    "argv, expected",
+    [
+        ([], None),  # None defers to config.json
+        (["--tui"], True),
+        (["--no-tui"], False),
+        (["--tui", "--no-tui"], False),  # last one wins
+    ],
+)
+def test_parse_arguments_tui_flags(monkeypatch, argv, expected):
+    registry = ModelRegistry()
+    monkeypatch.setattr(registry, "get_display_models", lambda: ["sonnet"])
+    monkeypatch.setattr(registry, "get_default_model", lambda: "sonnet")
+    monkeypatch.setattr("oi.cli.get_prompts", lambda: ["general", "concise"])
+    monkeypatch.setattr("oi.cli.load_user_config", lambda: {})
+    monkeypatch.setattr(sys, "argv", ["oi", *argv])
+
+    assert parse_arguments(registry).tui is expected

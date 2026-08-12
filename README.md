@@ -12,8 +12,9 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
 - Chat bookmarks with `/bookmark` in-chat plus bookmark/filter controls in the selector.
 - Optional web search and thinking traces when the selected model supports them.
   `--search` also lets the model read a URL you give it.
-- Optional full-screen TUI mode (`--tui`, or `"tui": true` in `config.json`)
-  that renders responses as live-streamed markdown.
+- Optional full-screen TUI mode (`--tui`, or `"tui": true` in `config.json`;
+  `--no-tui` opts back out for one run) that renders responses as
+  live-streamed markdown.
 - Paste images with `Alt+V` on vision-capable models.
 - User config in `~/.config/oi/` merges with built-in defaults.
 

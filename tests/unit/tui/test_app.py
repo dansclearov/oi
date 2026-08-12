@@ -621,6 +621,43 @@ def test_image_markers_are_atomic_and_renumbered(tmp_path):
     asyncio.run(scenario())
 
 
+def test_image_markers_render_as_colored_pills(tmp_path):
+    """Pills are cyan bold in the input and in the echoed message (CLI parity)."""
+    from pydantic_ai.messages import BinaryContent
+    from textual.widgets import Static
+
+    def pill_style(strip):
+        for segment in strip:
+            if segment.text == "[Image #1]":
+                return segment.style
+        raise AssertionError(f"no marker segment in {[s.text for s in strip]!r}")
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.focus()
+            await pilot.pause()
+            chat_input.insert("look at ")
+            chat_input.attach_image(BinaryContent(data=b"x", media_type="image/png"))
+            # The cursor rests on the marker's opening bracket; neither it nor
+            # the cursor line may repaint those cells.
+            chat_input.move_cursor((0, 8))
+            await pilot.pause()
+
+            style = pill_style(chat_input.render_line(0))
+            assert style.bold and style.color.number == 6
+
+            await pilot.press("enter")
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+
+            echoed = app.query("Static.content").last(Static)
+            assert pill_style(echoed.render_line(0)).color.number == 6
+
+    asyncio.run(scenario())
+
+
 def test_interrupt_discards_pending_message(tmp_path):
     async def scenario():
         app, chat, ctx = _make_app(tmp_path)

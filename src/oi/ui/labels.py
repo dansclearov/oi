@@ -20,8 +20,10 @@ RESET_ANSI = attr("reset")
 # Inline pill styling for paste/image placeholders. PT_STYLE is the
 # prompt_toolkit fragment style (used by `PillProcessor` during input);
 # `ansi_pill` wraps text in equivalent ANSI codes (used when echoing
-# canceled or submitted input back to scrollback via plain print).
+# canceled or submitted input back to scrollback via plain print);
+# RICH_STYLE is the same look for Rich `Text` spans (used by the TUI).
 PILL_PT_STYLE = "fg:ansicyan bold"
+PILL_RICH_STYLE = "cyan bold"
 _PILL_ANSI_OPEN = fg("cyan") + attr("bold")
 
 

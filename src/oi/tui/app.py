@@ -24,6 +24,7 @@ from pydantic_ai.messages import (
     UserContent,
     UserPromptPart,
 )
+from rich.style import Style
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
@@ -31,7 +32,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Markdown, Static, TextArea
-from textual.widgets.text_area import Selection
+from textual.widgets.text_area import Selection, TextAreaTheme
 from textual.timer import Timer
 from textual.widgets._markdown import MarkdownStream
 from textual.worker import Worker
@@ -73,6 +74,7 @@ from oi.ui.labels import (
     AI_LABEL,
     ERROR_LABEL,
     INFO_LABEL,
+    PILL_RICH_STYLE,
     SYSTEM_LABEL,
     USER_LABEL,
     WARNING_LABEL,
@@ -117,6 +119,23 @@ LABEL_MARKERS = {
     WARNING_LABEL: "",
     ERROR_LABEL: "",
 }
+
+
+_IMAGE_MARKER_RE = re.compile(r"\[Image #(\d+)\]")
+
+# An empty cursor style makes TextArea skip painting a cursor cell entirely —
+# the visible cursor is the terminal's own (shaped via DECSCUSR). Styling it
+# neutrally instead, which is all CSS can do, would flatten the color of
+# whatever cell it lands on (e.g. the `[` of an image pill).
+_NO_CURSOR_THEME = TextAreaTheme(name="oi", cursor_style=Style())
+
+
+def _pill_text(text: str) -> Text:
+    """Rich text with `[Image #N]` markers styled like the scrollback pills."""
+    result = Text(text)
+    for match in _IMAGE_MARKER_RE.finditer(text):
+        result.stylize(PILL_RICH_STYLE, match.start(), match.end())
+    return result
 
 
 class Notice(Message):
@@ -213,8 +232,6 @@ class ChatInput(TextArea):
     resets for the next turn.
     """
 
-    _IMAGE_MARKER_RE = re.compile(r"\[Image #(\d+)\]")
-
     class Submitted(Message):
         def __init__(self, text: str) -> None:
             super().__init__()
@@ -242,8 +259,14 @@ class ChatInput(TextArea):
         super().__init__()
         self.show_line_numbers = False
         # The hardware terminal cursor is used instead (steady, mode-shaped);
-        # the painted cursor is hidden via CSS and must not blink in tests.
+        # the painted cursor is never drawn and must not blink in tests.
         self.cursor_blink = False
+        self.register_theme(_NO_CURSOR_THEME)
+        self.theme = _NO_CURSOR_THEME.name
+        # Both would stylize whole cells last, flattening the image pills'
+        # color, and neither earns its keep in a prose input.
+        self.highlight_cursor_line = False
+        self.match_cursor_bracket = False
         self.vim: Optional[VimHandler] = None
         self._images: dict[int, BinaryContent] = {}
 
@@ -346,7 +369,7 @@ class ChatInput(TextArea):
 
         parts: list[UserContent] = []
         pos = 0
-        for match in self._IMAGE_MARKER_RE.finditer(text):
+        for match in _IMAGE_MARKER_RE.finditer(text):
             image = images.get(int(match.group(1)))
             if image is None:
                 continue
@@ -419,11 +442,32 @@ class ChatInput(TextArea):
                 return start if idx - start < end - idx else end
         return idx
 
+    def get_line(self, line_index: int) -> Text:
+        """The line as rendered, with intact image markers styled as pills.
+
+        The scrollback UI gets this from `PillProcessor`; here it rides on
+        TextArea's documented per-line styling hook. Every edit rebuilds the
+        highlight map, which clears the rendered-line cache, so styling can't
+        go stale against a renumbered marker.
+        """
+        line = super().get_line(line_index)
+        if not self._images:
+            return line
+        document = cast("Document", self.document)
+        for start, end, _ in self._intact_markers():
+            start_row, start_column = document.get_location_from_index(start)
+            if start_row != line_index:
+                continue
+            # A marker never spans lines, so the end is on this row too.
+            _, end_column = document.get_location_from_index(end)
+            line.stylize(PILL_RICH_STYLE, start_column, end_column)
+        return line
+
     def _intact_markers(self) -> list[tuple[int, int, int]]:
         """(start, end, number) spans of markers backed by a pending image."""
         seen: set[int] = set()
         spans = []
-        for match in self._IMAGE_MARKER_RE.finditer(self.text):
+        for match in _IMAGE_MARKER_RE.finditer(self.text):
             number = int(match.group(1))
             if number in self._images and number not in seen:
                 seen.add(number)
@@ -594,13 +638,6 @@ class OiApp(App):
         border: none;
         background: transparent;
     }
-    /* The visible cursor is the terminal's own (shaped via DECSCUSR); hide
-       the painted cell cursor so there aren't two. */
-    ChatInput .text-area--cursor {
-        text-style: none !important;
-        color: ansi_default !important;
-        background: transparent !important;
-    }
     /* nvim-style visual selection: paint a background and leave the text's
        own color alone, so it reads as a layer over the text. Textual's ansi
        theme would otherwise use `text-style: reverse`, which swaps fg/bg and
@@ -759,9 +796,7 @@ class OiApp(App):
 
         for role, content in history:
             if role == "user":
-                await self._chat_log.mount(
-                    _row(USER_LABEL, Static(Text(content), classes="content"))
-                )
+                await self._mount_user_row(content)
             else:
                 view = ResponseView()
                 row = _row(AI_LABEL, view)
@@ -770,6 +805,12 @@ class OiApp(App):
 
     async def _mount_notice(self, label: LabelStyle, text: str) -> None:
         await self._chat_log.mount(_notice_widget(label, text))
+
+    async def _mount_user_row(self, text: str) -> None:
+        """Echo a user message, keeping image markers styled as pills."""
+        await self._chat_log.mount(
+            _row(USER_LABEL, Static(_pill_text(text), classes="content"))
+        )
 
     # --- input ----------------------------------------------------------
 
@@ -797,7 +838,7 @@ class OiApp(App):
             input_widget.clear()
             input_widget.vim_reset()
             input_widget.sync_height()
-            await self._mount_notice(USER_LABEL, text)
+            await self._mount_user_row(text)
 
         if parsed_command is not None:
             command_name, command_args = parsed_command

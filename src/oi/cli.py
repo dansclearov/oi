@@ -105,11 +105,20 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         action="store_true",
         help="Keep thinking on but don't display the traces",
     )
+    # Paired flags over one dest: None means "whatever config.json says".
     behavior.add_argument(
         "--tui",
         action="store_true",
+        default=None,
         help='Run the full-screen TUI with rendered markdown ("tui": true in '
         "config.json makes it the default)",
+    )
+    behavior.add_argument(
+        "--no-tui",
+        dest="tui",
+        action="store_false",
+        default=None,
+        help="Run the classic scrollback UI for this run, overriding config.json",
     )
 
     other = parser.add_argument_group("other")

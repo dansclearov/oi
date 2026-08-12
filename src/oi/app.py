@@ -705,7 +705,7 @@ def main():
                 )
             )
 
-    if args.tui or ctx.config.tui:
+    if args.tui if args.tui is not None else ctx.config.tui:
         # Deferred import: the TUI (and textual) shouldn't tax the other paths.
         from oi.tui.app import run_tui
 
