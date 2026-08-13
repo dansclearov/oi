@@ -45,7 +45,7 @@ from oi.local_commands import (
     parse_local_command,
 )
 from oi.prompts import read_system_message_from_file
-from oi.llm_types import ChatOptions
+from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.registry import ModelRegistry
 from oi.ui.input_handler import InputHandler
 from oi.ui.labels import (
@@ -254,10 +254,24 @@ def toggle_setting(setting: ToggleSetting, config: Config) -> tuple[LabelStyle, 
     return INFO_LABEL, f"{setting.label} {status}.{setting.note}"
 
 
+def enable_search(
+    options: ChatOptions, capabilities: ModelCapabilities, model_name: str
+) -> tuple[LabelStyle, str]:
+    """Turn web search on for the rest of the session. One-way; there is no off."""
+    if not capabilities.supports_search:
+        return WARNING_LABEL, f"{model_name} does not support web search."
+    if options.enable_search:
+        return INFO_LABEL, "Web search is already on."
+
+    options.enable_search = True
+    return INFO_LABEL, "Web search enabled for this chat."
+
+
 def _handle_local_command(
     normalized_input: str,
     ctx: "ChatLoopContext",
     current_chat: Chat,
+    capabilities: ModelCapabilities,
 ) -> bool:
     """Handle local slash commands. Returns True when handled."""
     parsed_command = parse_local_command(normalized_input)
@@ -290,6 +304,13 @@ def _handle_local_command(
     setting = TOGGLE_SETTINGS.get(command_name)
     if setting is not None:
         label, message = toggle_setting(setting, ctx.config)
+        print(ansi_message(label, message))
+        return True
+
+    if command_name == "/search":
+        label, message = enable_search(
+            ctx.chat_options, capabilities, current_chat.metadata.model
+        )
         print(ansi_message(label, message))
         return True
 
@@ -433,7 +454,9 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
                 if not normalized_input:
                     continue
 
-                if _handle_local_command(normalized_input, ctx, current_chat):
+                if _handle_local_command(
+                    normalized_input, ctx, current_chat, active_capabilities
+                ):
                     continue
 
             # Process normal input

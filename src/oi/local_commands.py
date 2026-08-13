@@ -15,6 +15,7 @@ class LocalCommandSpec:
 LOCAL_COMMAND_SPECS = (
     LocalCommandSpec("/btw", "Ask a one-off side question (full context, not saved)"),
     LocalCommandSpec("/bookmark", "Toggle bookmark for the current chat"),
+    LocalCommandSpec("/search", "Turn web search on for this chat"),
     LocalCommandSpec("/vim", "Toggle vim input mode"),
     LocalCommandSpec("/tui", "Toggle full-screen TUI mode (next launch)"),
 )

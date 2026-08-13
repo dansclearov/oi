@@ -19,6 +19,9 @@ from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.ui.labels import BTW_AI_LABEL_TEXT, WARNING_LABEL, ansi_message
 
 
+_SEARCH_CAPS = ModelCapabilities(supports_search=True)
+
+
 def _make_ctx(**overrides: Any) -> ChatLoopContext:
     """Build a ChatLoopContext with mock defaults, overridable per-field."""
     llm_client = overrides.get("llm_client", Mock())
@@ -205,10 +208,53 @@ def test_handle_local_command_toggles_bookmark_for_saved_chat():
         "/bookmark",
         _make_ctx(chat_manager=chat_manager),
         current_chat,
+        _SEARCH_CAPS,
     )
 
     assert handled is True
     chat_manager.toggle_bookmark.assert_called_once_with(current_chat)
+
+
+def test_search_command_turns_search_on_for_the_session(capsys):
+    metadata = ChatMetadata(
+        id="test-chat-search",
+        title="Search",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        model="sonnet",
+        message_count=0,
+    )
+    ctx = _make_ctx(chat_options=ChatOptions(enable_search=False))
+    chat = Chat(metadata=metadata)
+
+    assert _handle_local_command("/search", ctx, chat, _SEARCH_CAPS) is True
+    assert ctx.chat_options.enable_search is True
+    assert "Web search enabled" in capsys.readouterr().out
+
+    # One-way: a second `/search` says so instead of turning it back off.
+    assert _handle_local_command("/search", ctx, chat, _SEARCH_CAPS) is True
+    assert ctx.chat_options.enable_search is True
+    assert "already on" in capsys.readouterr().out
+
+
+def test_search_command_reports_models_without_the_capability(capsys):
+    metadata = ChatMetadata(
+        id="test-chat-no-search",
+        title="No search",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        model="local-model",
+        message_count=0,
+    )
+    ctx = _make_ctx(chat_options=ChatOptions(enable_search=False))
+
+    handled = _handle_local_command(
+        "/search", ctx, Chat(metadata=metadata), ModelCapabilities()
+    )
+
+    assert handled is True
+    assert ctx.chat_options.enable_search is False
+    assert "local-model does not support web search" in capsys.readouterr().out
 
 
 def test_handle_local_command_rejects_bookmark_for_unsaved_chat(capsys):
@@ -227,6 +273,7 @@ def test_handle_local_command_rejects_bookmark_for_unsaved_chat(capsys):
         "/bookmark",
         _make_ctx(chat_manager=chat_manager),
         current_chat,
+        _SEARCH_CAPS,
     )
 
     assert handled is True
@@ -256,6 +303,7 @@ def test_handle_local_command_rejects_unknown_slash_command(capsys):
         "/bookamrk",
         _make_ctx(chat_manager=chat_manager),
         current_chat,
+        _SEARCH_CAPS,
     )
 
     assert handled is True
@@ -284,7 +332,7 @@ def test_vim_toggle_reports_a_config_that_could_not_be_saved(capsys, monkeypatch
     )
     ctx = _make_ctx(config=Config(vim_mode=False))
 
-    handled = _handle_local_command("/vim", ctx, Chat(metadata=metadata))
+    handled = _handle_local_command("/vim", ctx, Chat(metadata=metadata), _SEARCH_CAPS)
 
     assert handled is True
     # The session still gets vim mode; only the persistence is reported failed.
@@ -305,7 +353,7 @@ def test_tui_toggle_persists_the_setting(capsys):
     )
     ctx = _make_ctx(config=Config(tui=False))
 
-    handled = _handle_local_command("/tui", ctx, Chat(metadata=metadata))
+    handled = _handle_local_command("/tui", ctx, Chat(metadata=metadata), _SEARCH_CAPS)
 
     assert handled is True
     assert ctx.config.tui is True
@@ -330,7 +378,9 @@ def test_btw_runs_side_question_without_mutating_history():
     llm_client = Mock()
     ctx = _make_ctx(llm_client=llm_client)
 
-    handled = _handle_local_command("/btw what did I ask?", ctx, current_chat)
+    handled = _handle_local_command(
+        "/btw what did I ask?", ctx, current_chat, _SEARCH_CAPS
+    )
 
     assert handled is True
     # The chat is never mutated: question and answer are not persisted.
@@ -360,7 +410,7 @@ def test_btw_without_question_prints_usage_and_skips_request():
     llm_client = Mock()
 
     handled = _handle_local_command(
-        "/btw", _make_ctx(llm_client=llm_client), current_chat
+        "/btw", _make_ctx(llm_client=llm_client), current_chat, _SEARCH_CAPS
     )
 
     assert handled is True

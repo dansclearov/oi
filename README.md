@@ -11,7 +11,8 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
 - Chat history with resume/continue flows and an interactive selector that can search, preview, and open chats in your editor (`$EDITOR`).
 - Chat bookmarks with `/bookmark` in-chat plus bookmark/filter controls in the selector.
 - Optional web search and thinking traces when the selected model supports them.
-  `--search` also lets the model read a URL you give it.
+  `--search` also lets the model read a URL you give it, and `/search` turns it
+  on partway through a chat.
 - Optional full-screen TUI mode (`--tui`, or `"tui": true` in `config.json`;
   `--no-tui` opts back out for one run) that renders responses as
   live-streamed markdown.

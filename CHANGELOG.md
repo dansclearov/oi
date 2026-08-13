@@ -16,6 +16,10 @@ config/`models.yaml` format, alias names).
   both frontends; applies on the next launch.
 - `--no-tui` runs the classic scrollback UI for one run, overriding
   `"tui": true` in `config.json`.
+- The TUI header shows `· search` when search is on and the model supports
+  it, so an active web-search session is visible at a glance.
+- `/search` turns web search on mid-chat, so noticing you need it no longer
+  means quitting and relaunching with `oi -c --search`. There is no off switch.
 
 ### Changed
 

@@ -305,7 +305,11 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   labels to `❯` (user, dim in history) / `●` (assistant, default foreground) /
   `✱` (system prompt, shown only when non-empty); info/warning/error have NO
   marker and render as bare dim/yellow/red text lines (`_notice_widget`) —
-  plus a dim one-line header (`oi · model (sub|api) · …`) instead of the
+  plus a dim one-line header (`oi · model (sub|api)[ · search] · …`, the
+  search segment present only when search is on *and* the model supports it,
+  mirroring the client's own drop; `/search` rewrites the header in place via
+  `_refresh_header`, so the message count is snapshotted at mount rather than
+  re-read) instead of the
   banner. The input is pinned at the bottom with top/bottom border rules only
   (no side borders/padding, so its `❯` — full brightness — column-aligns with
   the history markers) and a 1-row hint line below it (`esc to interrupt`
@@ -420,6 +424,18 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   both the `Config` attribute and the `config.json` key, so adding a toggle is
   one table entry plus a `LocalCommandSpec`. On a failed write the setting still
   applies to the session and the notice says so
+- **`/search`** turns web search on for the rest of the session (`enable_search()`
+  in `app.py`, shared by both frontends) by flipping `ctx.chat_options`, so it
+  applies from the next turn without a relaunch. It is deliberately **one-way**:
+  there is no off, because turning search back off has never been wanted in
+  practice — the flow it exists for is "this needs current information" partway
+  into a chat. Each flip also invalidates the whole Anthropic prompt cache (the
+  `tools` array is the front of the hashed prefix, and
+  `anthropic_cache_tool_definitions` puts a breakpoint right there), so one-way
+  pays that once. Replaying `web_search_tool_result` blocks with the tool no
+  longer declared is *not* a constraint here — that was tested and works.
+  Models without `supports_search` get a warning and no state change, matching
+  the client's own silent drop
 - **`/btw <question>`** is the one command that takes an argument and runs a full
   model turn. `_run_side_question` (`app.py`) streams a normal reply against a
   *copy* of `current_chat.messages` (plus the question, and the pending system

@@ -52,7 +52,7 @@ class FakeLLMClient:
         return ModelResponse(parts=[TextPart(content=RESPONSE_MD)])
 
 
-def _make_app(tmp_path, capabilities=None):
+def _make_app(tmp_path, capabilities=None, chat_options=None):
     capabilities = capabilities or ModelCapabilities(supports_thinking=True)
     config = Config(chat_dir=str(tmp_path / "chats"))
     chat_manager = ChatManager(config)
@@ -64,7 +64,7 @@ def _make_app(tmp_path, capabilities=None):
         chat_manager=chat_manager,
         llm_client=llm_client,  # type: ignore[arg-type]
         input_handler=Mock(),
-        chat_options=ChatOptions(),
+        chat_options=chat_options or ChatOptions(),
         prompt_str="test prompt",
         active_model="test-model",
     )
@@ -95,6 +95,46 @@ def test_submitted_turn_streams_markdown_and_saves(tmp_path):
         saved = ctx.chat_manager.get_last_chat()
         assert saved is not None
         assert saved.metadata.title == "hello there"
+
+    asyncio.run(scenario())
+
+
+def test_header_shows_search_only_when_it_is_in_play(tmp_path):
+    async def header_for(capabilities, options):
+        app, _, _ = _make_app(tmp_path, capabilities, options)
+        async with app.run_test():
+            return str(app.query_one(".header").render())
+
+    async def scenario():
+        searching = ModelCapabilities(supports_search=True)
+        assert "· search" in await header_for(
+            searching, ChatOptions(enable_search=True)
+        )
+        assert "· search" not in await header_for(searching, ChatOptions())
+        # Enabled but unsupported: the client drops the tool, so does the header.
+        assert "· search" not in await header_for(
+            ModelCapabilities(), ChatOptions(enable_search=True)
+        )
+
+    asyncio.run(scenario())
+
+
+def test_search_command_turns_search_on_and_updates_the_header(tmp_path):
+    async def scenario():
+        app, _, ctx = _make_app(
+            tmp_path, ModelCapabilities(supports_search=True), ChatOptions()
+        )
+        async with app.run_test() as pilot:
+            assert "· search" not in str(app.query_one(".header").render())
+
+            app.query_one(ChatInput).insert("/search")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert ctx.chat_options.enable_search is True
+            # The header is mounted once at startup, so it has to be rewritten
+            # or it keeps advertising the state the session opened in.
+            assert "· search" in str(app.query_one(".header").render())
 
     asyncio.run(scenario())
 

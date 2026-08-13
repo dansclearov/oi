@@ -46,6 +46,7 @@ from oi.app import (
     _billing_tag,
     _maybe_generate_smart_title,
     _update_title_from_first_user_message,
+    enable_search,
     toggle_setting,
 )
 from oi.core.message_utils import flatten_history, latest_system_prompt
@@ -690,6 +691,7 @@ class OiApp(App):
         self._turn_active = False
         self._turn_worker: Optional[Worker] = None
         self._capabilities: Optional[ModelCapabilities] = None
+        self._header_message_count = current_chat.metadata.message_count
 
     def compose(self) -> ComposeResult:
         # can_focus=False: clicking the log to start a mouse selection must not
@@ -764,24 +766,48 @@ class OiApp(App):
     def _chat_log(self) -> VerticalScroll:
         return self.query_one("#log", VerticalScroll)
 
+    def _search_active(self) -> bool:
+        """Whether this session's turns actually get a web search tool.
+
+        `--search` is dropped by the client on models without the capability,
+        so the header must agree with that.
+        """
+        return bool(
+            self._ctx.chat_options.enable_search
+            and self._capabilities is not None
+            and self._capabilities.supports_search
+        )
+
+    def _header_text(self) -> str:
+        chat = self._chat
+        tag = _billing_tag(self._model_registry, self._ctx.active_model)
+        # Only shown when search is actually in play — its absence means off.
+        search = " · search" if self._search_active() else ""
+        if self._is_new_chat:
+            return f"oi · {chat.metadata.model}{tag}{search} · new chat"
+        return (
+            f"oi · {chat.metadata.title} · {chat.metadata.model}{tag}{search} "
+            f"· {self._header_message_count} messages"
+        )
+
+    def _refresh_header(self) -> None:
+        self.query_one("#header", Static).update(Text(self._header_text()))
+
     # --- startup replay -------------------------------------------------
 
     async def _replay_session_context(self) -> None:
         """One dim header line, the system prompt only when non-empty, then
         the conversation."""
         chat = self._chat
-        tag = _billing_tag(self._model_registry, self._ctx.active_model)
         history = flatten_history(chat.messages)
         has_user_messages = any(role == "user" for role, _ in history)
 
-        if self._is_new_chat:
-            header = f"oi · {chat.metadata.model}{tag} · new chat"
-        else:
-            header = (
-                f"oi · {chat.metadata.title} · {chat.metadata.model}{tag} "
-                f"· {chat.metadata.message_count} messages"
-            )
-        await self._chat_log.mount(Static(Text(header), classes="header"))
+        # The counts describe the session as opened; only the search segment
+        # moves after this (via `/search`), so the rest is frozen here.
+        self._header_message_count = chat.metadata.message_count
+        await self._chat_log.mount(
+            Static(Text(self._header_text()), classes="header", id="header")
+        )
 
         if not has_user_messages:
             system_message, from_chat = self._ctx.prompt_str, False
@@ -892,6 +918,16 @@ class OiApp(App):
             label, message = toggle_setting(setting, self._ctx.config)
             if setting.key == "vim_mode":
                 self.query_one(ChatInput).set_vim_enabled(self._ctx.config.vim_mode)
+            await self._mount_notice(label, message)
+            return
+
+        if command_name == "/search":
+            label, message = enable_search(
+                self._ctx.chat_options,
+                self._capabilities or ModelCapabilities(),
+                self._chat.metadata.model,
+            )
+            self._refresh_header()
             await self._mount_notice(label, message)
             return
 
