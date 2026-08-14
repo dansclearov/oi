@@ -25,6 +25,8 @@ config/`models.yaml` format, alias names).
 
 - TUI: pasted-image markers are styled as cyan pills, matching the scrollback
   UI — while composing, in the sent message, and when replaying a chat.
+- The `gemini-flash` alias now points to Gemini 3.7 Flash
+  (`gemini-3.7-flash`), replacing 3.6 Flash.
 
 ### Fixed
 
