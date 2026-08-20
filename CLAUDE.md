@@ -178,6 +178,9 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   "there was more text", not "your terminal is narrow". Since titles are stored
   within the cap and the selector's column is slightly wider (78), a wide
   terminal shows stored titles verbatim and only narrow ones re-cut.
+- The word-boundary snap is bounded by `MAX_WORD_SNAP`: a run without spaces
+  (CJK, a URL, a path) is one unbroken "word", so an unbounded snap would
+  discard the whole budget instead of a dangling fragment.
 
 **Smart Titles (`core/smart_title.py`, gated in `app.py:_maybe_generate_smart_title`):**
 - Titles are generated with one fixed cheap model — `SMART_TITLE_MODEL` (`haiku`)

@@ -23,6 +23,15 @@ def test_a_cut_snaps_back_to_the_last_word_boundary():
     assert truncate_to_cells("alpha beta gamma delta", 20) == "alpha beta gamma..."
 
 
+def test_a_run_without_spaces_is_cut_where_it_falls():
+    """CJK has no word spaces, and a URL is one unbroken run: snapping back to
+    the last real space would discard most of the budget, not a fragment."""
+    mixed = "bug report " + "日本語のとても長いテキスト" * 3
+    assert cell_len(truncate_to_cells(mixed, 60)) >= 58
+    url = "look at https://example.com/a/very/long/path/that/keeps/going/for/ages"
+    assert cell_len(truncate_to_cells(url, 40)) >= 38
+
+
 def test_a_cut_that_lands_on_a_boundary_keeps_the_whole_last_word():
     assert truncate_to_cells("alpha beta gamma", 12) == "alpha..."
 
