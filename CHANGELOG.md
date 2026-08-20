@@ -11,6 +11,9 @@ config/`models.yaml` format, alias names).
 
 ### Fixed
 
+- Chat selector (`oi -r`): titles with wide characters (CJK, and any
+  other double-width script) no longer overflow the row and wrap — the
+  title column is measured and padded in terminal cells now.
 - TUI: adding a line to the input no longer jolts the conversation — it used
   to settle a row short and jump one frame later, on every newline.
 - TUI: once the input grows past its height cap, the text no longer re-wraps

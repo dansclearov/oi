@@ -13,6 +13,7 @@ import sys
 import tempfile
 from typing import Callable, Optional
 
+from rich.cells import cell_len, set_cell_size
 from rich.console import Console, Group
 from rich.control import Control
 from rich.live import Live
@@ -419,29 +420,34 @@ class ChatSelector:
         title_col = min(78, width - 8 - 19 - 1 - len(meta_plain))
 
         if title_col >= MIN_FULL_TITLE_WIDTH:
+            # Measure and pad in terminal cells, not codepoints: CJK and other
+            # wide characters take two columns each, so a len()-based title
+            # column overflows the row and wraps.
             title = (
-                chat.title[: title_col - 3] + "..."
-                if len(chat.title) > title_col
-                else chat.title
+                set_cell_size(chat.title, title_col - 3) + "..."
+                if cell_len(chat.title) > title_col
+                else set_cell_size(chat.title, title_col)
             )
             meta = f"[bright_black]{meta_plain}[/bright_black]"
             if selected and not search_mode:
                 return (
                     f"[bright_yellow]❯ {display_index:2}. {bookmark_marker} "
-                    f"[{date_str}] {title:<{title_col}} {meta}[/bright_yellow]"
+                    f"[{date_str}] {title} {meta}[/bright_yellow]"
                 )
             if selected:
                 return (
                     f"[cyan]❯ {display_index:2}. {bookmark_marker} "
-                    f"[{date_str}] {title:<{title_col}} [/cyan]{meta}"
+                    f"[{date_str}] {title} [/cyan]{meta}"
                 )
-            return f"  {display_index:2}. {bookmark_marker} [{date_str}] {title:<{title_col}} {meta}"
+            return f"  {display_index:2}. {bookmark_marker} [{date_str}] {title} {meta}"
 
         marker = "❯" if selected else " "
         prefix = f"{marker} {display_index:2}. {bookmark_marker} "
         avail = max(1, width - len(prefix))
         title = (
-            chat.title if len(chat.title) <= avail else chat.title[: avail - 1] + "…"
+            chat.title
+            if cell_len(chat.title) <= avail
+            else set_cell_size(chat.title, avail - 1) + "…"
         )
         if selected and not search_mode:
             return f"[bright_yellow]{prefix}{title}[/bright_yellow]"

@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
+from rich.text import Text
+
 from oi.core.session import ChatMetadata
 from oi.ui.chat_selector import ChatSelector
 
@@ -59,3 +61,27 @@ def test_filter_chats_returns_only_bookmarked_entries():
     filtered = selector._filter_chats(chats, bookmarked_only=True)
 
     assert [chat.id for chat in filtered] == ["b"]
+
+
+def _row_cell_width(title: str, width: int, *, selected: bool = False) -> int:
+    selector = ChatSelector(Mock())
+    chat = _chat_metadata("a")
+    chat.title = title
+    row = selector._format_chat_row(
+        chat, 1, selected=selected, search_mode=False, width=width
+    )
+    return Text.from_markup(row).cell_len
+
+
+def test_format_chat_row_fits_width_with_wide_characters():
+    """Wide (CJK) titles take two cells per character; the row must still fit."""
+    kanji = "日本語の漢字がたくさん入っているとても長いタイトル"
+    for width in (100, 80, 60, 40):
+        assert _row_cell_width(kanji, width) <= width
+        assert _row_cell_width(kanji, width, selected=True) <= width
+        assert _row_cell_width(f"mixed {kanji} tail", width) <= width
+
+
+def test_format_chat_row_pads_short_wide_title_to_title_column():
+    """A short title is padded in cells, so the meta column stays aligned."""
+    assert _row_cell_width("短い漢字", 100) == _row_cell_width("short", 100)
