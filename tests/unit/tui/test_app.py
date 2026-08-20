@@ -3,7 +3,12 @@
 import asyncio
 from unittest.mock import Mock
 
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
 from textual.events import Key
 from textual.widgets import Markdown
 
@@ -11,7 +16,7 @@ from oi.app import ChatLoopContext
 from oi.config.settings import Config, load_user_config
 from oi.core.chat_manager import ChatManager
 from oi.llm_types import ChatOptions, ModelCapabilities
-from oi.tui.app import ChatInput, OiApp, ResponseView
+from oi.tui.app import MAX_INPUT_HEIGHT, ChatInput, ChatLog, OiApp, ResponseView
 from oi.tui.slash_menu import SlashMenu
 from oi.tui.vim import Mode as VimMode
 from oi.tui.renderer import ResponseStarted, TextDelta, ThinkingDelta, TuiRenderer
@@ -760,3 +765,182 @@ def test_renderer_posts_deltas_in_order():
         "part two",
     ]
     assert renderer.get_full_response() == "part one, part two"
+
+
+def _fill_history(chat, turns=20):
+    """Enough conversation that the log is scrolled to the bottom."""
+    for i in range(turns):
+        chat.messages.append(
+            ModelRequest(parts=[UserPromptPart(content=f"question {i}")])
+        )
+        chat.messages.append(
+            ModelResponse(parts=[TextPart(content="An answer.\n\n- one\n- two\n")])
+        )
+
+
+def test_a_newline_moves_the_conversation_in_one_step(tmp_path):
+    """Growing the input shifts the log once, not once per layout pass.
+
+    Anchored content is re-scrolled to the bottom from the container height
+    recorded on the *previous* layout pass, so an input that just grew leaves
+    the conversation a row short until the follow-up pass — visible as a jump
+    a frame after every newline.
+    """
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        _fill_history(chat)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            log = app.query_one(ChatLog)
+            screen = app.screen
+            scrolls: list[float] = []
+            compositor_refresh = screen._compositor_refresh
+
+            def record_frame() -> None:
+                compositor_refresh()
+                scrolls.append(log.scroll_y)
+
+            screen._compositor_refresh = record_frame
+
+            chat_input.insert("first line")
+            await pilot.pause()
+
+            for _ in range(3):
+                scrolls.clear()
+                await pilot.press("ctrl+j")
+                await pilot.pause()
+                await pilot.pause()
+
+                assert scrolls, "no frame was painted for the newline"
+                assert len(set(scrolls)) == 1, (
+                    f"the conversation moved mid-newline: {scrolls}"
+                )
+                assert scrolls[-1] == log.max_scroll_y
+
+    asyncio.run(scenario())
+
+
+def test_growing_past_the_height_cap_keeps_the_text_where_it_is(tmp_path):
+    """Beyond the cap the input scrolls instead of growing.
+
+    A visible scrollbar would take two columns off the wrap width and re-wrap
+    everything already typed, and the cursor must not lag a frame behind the
+    line being typed.
+    """
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            screen = app.screen
+            offsets: list[int] = []
+            compositor_refresh = screen._compositor_refresh
+
+            def record_frame() -> None:
+                compositor_refresh()
+                offsets.append(chat_input.scroll_offset.y)
+
+            screen._compositor_refresh = record_frame
+
+            chat_input.insert("line 1")
+            await pilot.pause()
+            wrap_width = chat_input.wrap_width
+
+            for line in range(2, MAX_INPUT_HEIGHT + 4):
+                offsets.clear()
+                await pilot.press("ctrl+j")
+                chat_input.insert(f"line {line}")
+                await pilot.pause()
+                await pilot.pause()
+
+                assert chat_input.wrap_width == wrap_width, "the input re-wrapped"
+                assert len(set(offsets)) == 1, f"the text moved mid-edit: {offsets}"
+                assert offsets[-1] == chat_input.scroll_offset.y
+
+    asyncio.run(scenario())
+
+
+def test_deleting_a_newline_puts_the_caret_straight_where_it_lands(tmp_path):
+    """The caret goes to the end of the line above, without a detour.
+
+    The input is pinned to the bottom, so joining two lines moves its top edge
+    down a row — but TextArea records the caret's screen offset mid-edit,
+    against the geometry it is leaving, so the terminal cursor would be
+    painted a row high and drop back on the next frame.
+    """
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            screen = app.screen
+            positions: list[tuple[int, int]] = []
+            compositor_refresh = screen._compositor_refresh
+
+            def record_frame() -> None:
+                compositor_refresh()
+                positions.append(tuple(app.cursor_position))
+
+            screen._compositor_refresh = record_frame
+
+            chat_input.insert("abc")
+            await pilot.press("ctrl+j")
+            chat_input.insert("defg")
+            await pilot.press("home")
+            await pilot.pause()
+            settled_before = positions[-1]
+            positions.clear()
+
+            await pilot.press("backspace")
+            await pilot.pause()
+            await pilot.pause()
+
+            assert positions, "no frame was painted for the delete"
+            assert len(set(positions)) == 1, f"the caret took a detour: {positions}"
+            # End of "abc", on the row the second line used to occupy.
+            assert positions[-1] == (5, settled_before[1])
+
+    asyncio.run(scenario())
+
+
+def test_vim_line_delete_resizes_the_input_in_the_painted_frame(tmp_path):
+    """A vim `dd` that shrinks the input is one frame, caret included.
+
+    Syncing the height off the `Changed` message the edit posts is a frame
+    late: `dd` does enough work that the screen is painted before that message
+    is handled, leaving the input a row too tall with the caret on the old row.
+    """
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.set_vim_enabled(True)
+            screen = app.screen
+            frames: list[tuple[int, tuple[int, int]]] = []
+            compositor_refresh = screen._compositor_refresh
+
+            def record_frame() -> None:
+                compositor_refresh()
+                frames.append((chat_input.size.height, tuple(app.cursor_position)))
+
+            screen._compositor_refresh = record_frame
+
+            chat_input.insert("alpha\nbeta\ngamma")
+            chat_input.move_cursor((1, 0))
+            await pilot.press("escape")
+            await pilot.pause()
+            frames.clear()
+
+            await pilot.press("d")
+            await pilot.press("d")
+            await pilot.pause()
+            await pilot.pause()
+
+            assert chat_input.text == "alpha\ngamma"
+            assert frames, "no frame was painted for the delete"
+            assert len(set(frames)) == 1, f"the input settled late: {frames}"
+            assert frames[-1][0] == 2
+
+    asyncio.run(scenario())

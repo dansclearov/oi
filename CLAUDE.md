@@ -289,6 +289,38 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   `tests/unit/tui/test_app.py` asserts the submit is one paint by sampling
   `Compositor.visible_widgets` per frame (`mount()` registers a widget
   immediately, so a DOM query can't tell a laid-out row from a pending one).
+  A height change also costs *two* layout passes — the compositor writes each
+  resized widget's `virtual_size`, a `layout=True` reactive, so the resize
+  dirties layout again — and the pass that shrinks the log re-anchors it from
+  the container height recorded on the previous pass. Left alone the
+  conversation therefore lands a row short and jumps on the follow-up pass, on
+  every newline: `ChatLog.preempt_resize` (called from `sync_height`) records
+  the height the pane is about to have so the first pass anchors it right,
+  with the follow-up pass still there to correct a wrong guess. That call is
+  why `ChatInput` needs a `ChatLog` sibling on the screen — the vim tests'
+  harness composes one for that reason.
+- **The height sync is synchronous with the edit**: `sync_height` runs from
+  `ChatInput.edit` (plus `undo`/`redo`, which bypass `edit`), *not* off the
+  `Changed` message the edit posts — a frame can be painted before that
+  message is handled, which showed up as the input keeping its old height for
+  a frame after a vim `dd`. The app's `TextArea.Changed` handler still calls
+  it, harmlessly: by then it's a no-op.
+- **The caret and a pending resize**: `TextArea` points the terminal cursor at
+  `cursor_screen_offset`, measured against the geometry the input has *now*,
+  so between the height write and the layout pass it names the row the caret
+  is leaving — deleting a newline painted it a row high and dropped it back a
+  frame later. `_terminal_cursor_offset` corrects for the rows still in
+  flight (`_pending_resize_delta`: the input is bottom-pinned, and its own
+  scroll is about to be zero because the height only changes while the
+  wrapped text fits). It is applied from `_watch_selection` too, since vim
+  moves the cursor *after* the edit that resized the input.
+- **Input scrolling past `MAX_INPUT_HEIGHT`**: the input keeps
+  `scrollbar-size-vertical: 0` like the log — a visible scrollbar would take
+  two columns off the wrap width and re-wrap everything already typed at the
+  moment the cap is crossed. `ChatInput.edit` re-runs `scroll_cursor_visible`
+  after `super().edit()`: TextArea scrolls to the cursor mid-edit, before
+  `_refresh_size` updates the virtual size, so past the cap the caret would
+  trail the typed line by a frame.
 - **Interrupt = worker cancellation**: Ctrl+C (priority binding, so it
   pre-empts Textual's own `ctrl+c` → `screen.copy_text`) forks in
   `action_interrupt_or_quit`: cancel the turn worker while streaming, else

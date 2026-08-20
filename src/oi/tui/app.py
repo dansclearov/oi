@@ -30,9 +30,10 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.geometry import Offset, Size
 from textual.message import Message
 from textual.widgets import Markdown, Static, TextArea
-from textual.widgets.text_area import Selection, TextAreaTheme
+from textual.widgets.text_area import Edit, EditResult, Selection, TextAreaTheme
 from textual.timer import Timer
 from textual.widgets._markdown import MarkdownStream
 from textual.worker import Worker
@@ -219,6 +220,23 @@ class ResponseView(Vertical):
             await self.mount(Static(Text("[interrupted]"), classes="interrupted"))
 
 
+class ChatLog(VerticalScroll):
+    """The conversation pane: bottom-anchored, told about resizes up front."""
+
+    def preempt_resize(self, delta: int) -> None:
+        """Record the height this pane is about to have, `delta` rows shorter.
+
+        Anchored content is re-scrolled to the bottom during the layout pass,
+        from the container height recorded on the *previous* pass — so a
+        growing input anchors one row short and only settles on the follow-up
+        pass, jumping the whole conversation a frame after every newline.
+        Reporting the new height first anchors it right on the first pass; the
+        follow-up pass still corrects it if this guess is off.
+        """
+        width, height = self._container_size
+        self._container_size = Size(width, max(height - delta, 0))
+
+
 class ChatInput(TextArea):
     """Multi-line input: Enter submits, Shift+Enter/Ctrl+J insert a newline.
 
@@ -398,6 +416,10 @@ class ChatInput(TextArea):
         # one-character sentinel pills. Re-entering the watcher is safe: the
         # snapped position is outside every marker, so it settles at once.
         # (getattr: the reactive fires during TextArea.__init__, before ours.)
+        # TextArea points the terminal cursor at the row it measures now;
+        # correct it while a resize is still pending (vim moves the cursor
+        # after the edit that changed the height, so this is that path).
+        self._sync_terminal_cursor()
         if not getattr(self, "_images", None):
             return
         snapped = self._snap_selection(previous_selection, selection)
@@ -513,6 +535,30 @@ class ChatInput(TextArea):
                 return True
         return False
 
+    def edit(self, edit: Edit) -> EditResult:
+        """Apply an edit, then re-measure everything it changed.
+
+        Both steps have to happen here rather than off the `Changed` message
+        the edit posts, because a frame can be painted before that message is
+        handled — the input was seen keeping its old height for a frame after
+        a vim `dd`. `scroll_cursor_visible` runs again because TextArea
+        scrolls to the cursor mid-edit, before `_refresh_size` updates the
+        virtual size, so past the height cap the caret trails the line being
+        typed by a frame.
+        """
+        result = super().edit(edit)
+        self.scroll_cursor_visible()
+        self.sync_height()
+        return result
+
+    def undo(self) -> None:
+        super().undo()
+        self.sync_height()
+
+    def redo(self) -> None:
+        super().redo()
+        self.sync_height()
+
     def sync_height(self) -> None:
         """Grow with the (wrapped) content up to a cap, like a chat compose box.
 
@@ -523,8 +569,37 @@ class ChatInput(TextArea):
         height = min(max(self.wrapped_document.height, 1), MAX_INPUT_HEIGHT)
         current = self.styles.height
         if current is None or current.value != height:
+            delta = height - int(current.value) if current is not None else 0
             self.styles.height = height
+            if delta:
+                # The pane above loses exactly the rows the input gained.
+                self.screen.query_one(ChatLog).preempt_resize(delta)
+            self._sync_terminal_cursor()
             self.call_after_refresh(self._sync_terminal_cursor)
+
+    def _pending_resize_delta(self) -> int:
+        """Rows the input is about to gain once the layout catches up."""
+        height = self.styles.height
+        if height is None:
+            return 0
+        return int(height.value) - self.size.height
+
+    def _terminal_cursor_offset(self) -> Offset:
+        """Where the caret belongs, accounting for a resize still in flight.
+
+        `cursor_screen_offset` measures against the geometry the input has
+        right now, so between a height change and the layout pass it names the
+        row the caret is leaving — deleting a newline would paint it a row
+        high and drop it back a frame later. The input is pinned to the
+        bottom, so its top moves by the pending delta, and its own scroll is
+        about to be zero: the height only changes while the wrapped text fits
+        (past the cap it stays pinned at the cap, scrolling instead).
+        """
+        offset = self.cursor_screen_offset
+        delta = self._pending_resize_delta()
+        if not delta:
+            return offset
+        return Offset(offset.x, offset.y + self.scroll_offset.y - delta)
 
     def _sync_terminal_cursor(self) -> None:
         """Re-point the terminal cursor after the widget moves.
@@ -541,7 +616,7 @@ class ChatInput(TextArea):
         """
         if not self.has_focus:
             return
-        offset = self.cursor_screen_offset
+        offset = self._terminal_cursor_offset()
         if self.app.cursor_position == offset:
             return
         self.app.cursor_position = offset
@@ -634,6 +709,9 @@ class OiApp(App):
         border: none;
         padding: 0;
         background: transparent;
+        /* Past the height cap the input scrolls, but a visible scrollbar
+           would narrow the wrap width and re-wrap everything already typed. */
+        scrollbar-size-vertical: 0;
     }
     ChatInput:focus {
         border: none;
@@ -697,7 +775,7 @@ class OiApp(App):
         # can_focus=False: clicking the log to start a mouse selection must not
         # steal focus from the input, or typing afterwards goes nowhere.
         # Keyboard scrolling stays available through the app-level bindings.
-        yield VerticalScroll(id="log", can_focus=False)
+        yield ChatLog(id="log", can_focus=False)
         yield SlashMenu()
         with Horizontal(id="input-row"):
             yield Static(Text("❯ "), id="prompt-marker")
@@ -763,8 +841,8 @@ class OiApp(App):
         self._refresh_hint()
 
     @property
-    def _chat_log(self) -> VerticalScroll:
-        return self.query_one("#log", VerticalScroll)
+    def _chat_log(self) -> ChatLog:
+        return self.query_one("#log", ChatLog)
 
     def _search_active(self) -> bool:
         """Whether this session's turns actually get a web search tool.

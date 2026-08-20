@@ -9,6 +9,18 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Fixed
+
+- TUI: adding a line to the input no longer jolts the conversation — it used
+  to settle a row short and jump one frame later, on every newline.
+- TUI: once the input grows past its height cap, the text no longer re-wraps
+  (a scrollbar was appearing and narrowing it) and the cursor no longer trails
+  the line being typed by a frame.
+- TUI: deleting a newline sends the cursor straight to the end of the line
+  above, instead of flicking up a row and back.
+- TUI: a vim `dd` that shrinks the input resizes it in the same frame, rather
+  than leaving it a row too tall until the next one.
+
 ## [0.2.1] - 2026-08-14
 
 ### Added

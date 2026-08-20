@@ -69,12 +69,14 @@ class TestObjects:
 def _make_input():
     from textual.app import App
 
-    from oi.tui.app import ChatInput
+    from oi.tui.app import ChatInput, ChatLog
     from oi.tui.slash_menu import SlashMenu
 
     class Harness(App):
-        # The menu is a sibling in OiApp too: the input consults it on Esc.
+        # Both are siblings in OiApp too: the input consults the menu on Esc,
+        # and tells the log how much room it is about to take.
         def compose(self):
+            yield ChatLog(id="log")
             yield SlashMenu()
             yield ChatInput()
 
@@ -352,13 +354,14 @@ def test_mode_changes_are_reported():
         from textual import on
         from textual.app import App
 
-        from oi.tui.app import ChatInput
+        from oi.tui.app import ChatInput, ChatLog
         from oi.tui.slash_menu import SlashMenu
 
         seen: list[Mode | None] = []
 
         class Harness(App):
             def compose(self):
+                yield ChatLog(id="log")
                 yield SlashMenu()
                 yield ChatInput()
 
