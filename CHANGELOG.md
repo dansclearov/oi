@@ -11,10 +11,11 @@ config/`models.yaml` format, alias names).
 
 ### Changed
 
-- A shortened chat title now ends in `…`, whether it was shortened to fit the
-  title cap or to fit the terminal — the mark means "there was more text"
+- A shortened chat title now ends in `...`, whether it was shortened to fit
+  the title cap or to fit the terminal — the mark means "there was more text"
   either way. Titles cut from a first message used to be shortened silently.
-  Cuts snap back to the last word boundary.
+  Cuts snap back to the last word boundary. `oi stats` marks a trimmed chat
+  title the same way.
 
 ### Fixed
 

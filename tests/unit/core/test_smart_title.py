@@ -49,7 +49,7 @@ def test_generate_builds_prompt_and_sanitizes_title():
 
     assert title is not None
     assert cell_len(title) == MAX_TITLE_LENGTH
-    assert title.endswith("…")
+    assert title.endswith("...")
 
     prompt_messages, model, options = llm_client.chat.call_args[0]
     assert model == "sonnet"

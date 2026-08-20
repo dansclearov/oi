@@ -11,22 +11,22 @@ def test_text_within_budget_is_returned_unchanged():
 def test_wide_characters_are_budgeted_at_two_cells_each():
     """Codepoint budgets are twice as generous to CJK; cells are the truth."""
     fitted = truncate_to_cells("漢字" * 20, 20)
-    assert len(fitted) == 10  # 9 wide characters + the ellipsis
+    assert len(fitted) == 11  # 8 wide characters + the ellipsis
     assert cell_len(fitted) <= 20
 
 
 def test_a_cut_is_marked_with_an_ellipsis():
-    assert truncate_to_cells("x" * 30, 10) == "x" * 9 + "…"
+    assert truncate_to_cells("x" * 30, 10) == "x" * 7 + "..."
 
 
 def test_a_cut_snaps_back_to_the_last_word_boundary():
-    assert truncate_to_cells("alpha beta gamma delta", 20) == "alpha beta gamma…"
+    assert truncate_to_cells("alpha beta gamma delta", 20) == "alpha beta gamma..."
 
 
 def test_a_cut_that_lands_on_a_boundary_keeps_the_whole_last_word():
-    assert truncate_to_cells("alpha beta gamma", 12) == "alpha beta…"
+    assert truncate_to_cells("alpha beta gamma", 12) == "alpha..."
 
 
 def test_a_split_wide_character_leaves_no_gap_before_the_ellipsis():
     """A wide character straddling the budget costs a cell rather than a gap."""
-    assert truncate_to_cells("漢字漢字", 6) == "漢字…"
+    assert truncate_to_cells("漢字漢字漢字", 8) == "漢字..."

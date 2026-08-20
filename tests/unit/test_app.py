@@ -482,4 +482,4 @@ def test_first_message_title_is_capped_in_cells_and_marks_the_cut():
     _update_title_from_first_user_message(chat)
 
     assert cell_len(chat.metadata.title) <= MAX_TITLE_LENGTH
-    assert chat.metadata.title.endswith("…")
+    assert chat.metadata.title.endswith("...")

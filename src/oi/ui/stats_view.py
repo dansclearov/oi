@@ -10,6 +10,7 @@ from rich.markup import escape
 from rich.text import Text
 
 from oi.core.stats import Stats, current_streak, longest_streak
+from oi.text import truncate_to_cells
 
 WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # GitHub dark-mode green ramp for activity levels 1..4. Idle days (level 0) are
@@ -170,7 +171,7 @@ def _render_deep(stats: Stats, console: Console) -> None:
 
     if deep.biggest_chat_by_words is not None:
         title, words = deep.biggest_chat_by_words
-        trimmed = title if len(title) <= 40 else title[:39] + "…"
+        trimmed = truncate_to_cells(title, 40)
         console.print(
             f"  biggest chat: [bold]{words:,}[/bold] words — {escape(trimmed)}"
         )

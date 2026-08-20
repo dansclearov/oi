@@ -2,7 +2,7 @@
 
 from rich.cells import cell_len, set_cell_size
 
-ELLIPSIS = "…"
+ELLIPSIS = "..."
 
 
 def truncate_to_cells(text: str, max_cells: int) -> str:

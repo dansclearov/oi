@@ -172,7 +172,9 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   and the chat selector's title column measure against. Counting codepoints
   stored a wide-script title at twice the selector's column width, so those
   titles, and only those, came back ellipsised.
-- Every cut is marked with `…`, at whichever layer made it: the mark means
+- Every cut is marked with `text.py:ELLIPSIS` (three ASCII dots), at whichever
+  layer made it — the chat selector's rows, `oi stats`' biggest-chat title, and
+  the stored titles themselves. The mark means
   "there was more text", not "your terminal is narrow". Since titles are stored
   within the cap and the selector's column is slightly wider (78), a wide
   terminal shows stored titles verbatim and only narrow ones re-cut.
