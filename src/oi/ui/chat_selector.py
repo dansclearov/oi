@@ -13,7 +13,7 @@ import sys
 import tempfile
 from typing import Callable, Optional
 
-from rich.cells import cell_len, set_cell_size
+from rich.cells import set_cell_size
 from rich.console import Console, Group
 from rich.control import Control
 from rich.live import Live
@@ -31,6 +31,7 @@ from oi.constants import (
     PREVIEW_SCROLL_LINES,
 )
 from oi.core.session import Chat, ChatMetadata
+from oi.text import truncate_to_cells
 from oi.ui.labels import INFO_LABEL, rich_message
 from oi.ui.transcript import plaintext_transcript, search_blob, styled_transcript
 
@@ -420,15 +421,11 @@ class ChatSelector:
         title_col = min(78, width - 8 - 19 - 1 - len(meta_plain))
 
         if title_col >= MIN_FULL_TITLE_WIDTH:
-            # Measure and pad in terminal cells, not codepoints: CJK and other
-            # wide characters take two columns each, so a len()-based title
-            # column overflows the row and wraps.
-            title = (
-                set_cell_size(chat.title, title_col - 1).rstrip() + "…"
-                if cell_len(chat.title) > title_col
-                else chat.title
-            )
-            title = set_cell_size(title, title_col)
+            # Fit and pad in terminal cells, not codepoints: CJK and other wide
+            # characters take two columns each, so a len()-based title column
+            # overflows the row and wraps. Titles are stored within
+            # MAX_TITLE_LENGTH cells, so this only re-cuts on narrow terminals.
+            title = set_cell_size(truncate_to_cells(chat.title, title_col), title_col)
             meta = f"[bright_black]{meta_plain}[/bright_black]"
             if selected and not search_mode:
                 return (
@@ -445,11 +442,7 @@ class ChatSelector:
         marker = "❯" if selected else " "
         prefix = f"{marker} {display_index:2}. {bookmark_marker} "
         avail = max(1, width - len(prefix))
-        title = (
-            chat.title
-            if cell_len(chat.title) <= avail
-            else set_cell_size(chat.title, avail - 1) + "…"
-        )
+        title = truncate_to_cells(chat.title, avail)
         if selected and not search_mode:
             return f"[bright_yellow]{prefix}{title}[/bright_yellow]"
         if selected:

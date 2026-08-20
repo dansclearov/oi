@@ -464,7 +464,7 @@ def test_run_chat_loop_does_not_touch_chat_on_exit_when_ephemeral():
     chat_manager.save_chat.assert_not_called()
 
 
-def test_first_message_title_is_capped_in_cells():
+def test_first_message_title_is_capped_in_cells_and_marks_the_cut():
     """Wide characters cost two columns, so the cap has to count columns —
     otherwise a CJK title is stored at twice the chat selector's budget."""
     chat = Chat(
@@ -482,3 +482,4 @@ def test_first_message_title_is_capped_in_cells():
     _update_title_from_first_user_message(chat)
 
     assert cell_len(chat.metadata.title) <= MAX_TITLE_LENGTH
+    assert chat.metadata.title.endswith("…")

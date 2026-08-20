@@ -6,7 +6,7 @@ from rich.text import Text
 
 from oi.constants import MAX_TITLE_LENGTH
 from oi.core.session import ChatMetadata
-from oi.core.smart_title import truncate_to_cells
+from oi.text import truncate_to_cells
 from oi.ui.chat_selector import ChatSelector
 
 
@@ -101,17 +101,19 @@ def _row(title: str, width: int) -> str:
     ).plain
 
 
-def test_a_title_stored_at_the_cap_is_not_truncated_again():
+def test_a_title_stored_at_the_cap_is_shown_whole():
     """The stored cap and the title column are both cell budgets, so a title
-    oi wrote itself fits a wide terminal whatever script it is in."""
+    oi wrote itself is never re-cut on a wide terminal, whatever its script.
+    Any ellipsis on such a row is the stored one, marking the message it came
+    from — not the selector running out of room."""
     for raw in ("english words " * 20, "漢字" * 100):
         stored = truncate_to_cells(raw, MAX_TITLE_LENGTH)
         assert cell_len(stored) <= MAX_TITLE_LENGTH
-        assert "…" not in _row(stored, 160)
+        assert stored in _row(stored, 160)
 
 
-def test_a_truncated_title_ends_in_a_single_ellipsis():
-    """No gap before it when the cut splits a wide character in half."""
+def test_a_title_too_wide_for_the_column_is_re_cut():
+    """Narrow terminals re-cut, with no gap before the mark and no ASCII dots."""
     for title in ("漢字" * 40, "word " * 40):
         row = _row(title, 100)
         assert "…" in row and " …" not in row

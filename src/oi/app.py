@@ -33,7 +33,6 @@ from oi.core.message_utils import (
     latest_system_prompt,
 )
 from oi.core.session import Chat
-from oi.core.smart_title import truncate_to_cells
 from oi.exceptions import (
     ChatNotFoundError,
     ModelNotFoundError,
@@ -48,6 +47,7 @@ from oi.local_commands import (
 from oi.prompts import read_system_message_from_file
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.registry import ModelRegistry
+from oi.text import truncate_to_cells
 from oi.ui.input_handler import InputHandler
 from oi.ui.labels import (
     AI_LABEL,

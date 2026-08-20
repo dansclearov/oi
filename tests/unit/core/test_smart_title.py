@@ -7,7 +7,7 @@ from rich.cells import cell_len
 from oi.constants import MAX_TITLE_LENGTH
 from oi.core.message_utils import flatten_history
 from oi.core.session import Chat, ChatMetadata
-from oi.core.smart_title import SmartTitleGenerator, truncate_to_cells
+from oi.core.smart_title import SmartTitleGenerator
 
 
 def _make_chat() -> Chat:
@@ -83,13 +83,3 @@ def test_sanitized_title_is_capped_in_cells_not_codepoints():
 
     assert title is not None
     assert cell_len(title) == MAX_TITLE_LENGTH
-
-
-def test_truncate_to_cells_leaves_short_text_unpadded():
-    assert truncate_to_cells("short", 20) == "short"
-    assert truncate_to_cells("漢字", 20) == "漢字"
-
-
-def test_truncate_to_cells_drops_the_pad_of_a_split_wide_character():
-    """Cutting through a wide character leaves set_cell_size a padding space."""
-    assert truncate_to_cells("漢字漢字", 5) == "漢字"

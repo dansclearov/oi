@@ -131,6 +131,7 @@ src/oi/
 ├── local_commands.py  # Local in-chat slash command registry + completion
 ├── prompts.py         # Prompt file loading
 ├── registry.py        # ModelRegistry - alias + capability management (single config load)
+├── text.py            # Cell-accurate text fitting (titles, terminal rows)
 └── renderers.py       # Response rendering (StyledRenderer)
 ```
 
@@ -163,6 +164,18 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - Automatic session persistence with metadata in `core/session.py`
 - Smart title generation (triggers after 8+ messages)
 - Auto-save functionality
+
+**Title Length (`text.py:truncate_to_cells`):**
+- `MAX_TITLE_LENGTH` is a budget in **terminal cells**, not codepoints — one
+  CJK character costs two — and it is what both title paths
+  (`_update_title_from_first_user_message`, `SmartTitleGenerator._sanitize_title`)
+  and the chat selector's title column measure against. Counting codepoints
+  stored a wide-script title at twice the selector's column width, so those
+  titles, and only those, came back ellipsised.
+- Every cut is marked with `…`, at whichever layer made it: the mark means
+  "there was more text", not "your terminal is narrow". Since titles are stored
+  within the cap and the selector's column is slightly wider (78), a wide
+  terminal shows stored titles verbatim and only narrow ones re-cut.
 
 **Smart Titles (`core/smart_title.py`, gated in `app.py:_maybe_generate_smart_title`):**
 - Titles are generated with one fixed cheap model — `SMART_TITLE_MODEL` (`haiku`)
