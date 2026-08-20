@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
+from rich.cells import cell_len
 from rich.text import Text
 
+from oi.constants import MAX_TITLE_LENGTH
 from oi.core.session import ChatMetadata
+from oi.core.smart_title import truncate_to_cells
 from oi.ui.chat_selector import ChatSelector
 
 
@@ -85,3 +88,31 @@ def test_format_chat_row_fits_width_with_wide_characters():
 def test_format_chat_row_pads_short_wide_title_to_title_column():
     """A short title is padded in cells, so the meta column stays aligned."""
     assert _row_cell_width("短い漢字", 100) == _row_cell_width("short", 100)
+
+
+def _row(title: str, width: int) -> str:
+    selector = ChatSelector(Mock())
+    chat = _chat_metadata("a")
+    chat.title = title
+    return Text.from_markup(
+        selector._format_chat_row(
+            chat, 1, selected=False, search_mode=False, width=width
+        )
+    ).plain
+
+
+def test_a_title_stored_at_the_cap_is_not_truncated_again():
+    """The stored cap and the title column are both cell budgets, so a title
+    oi wrote itself fits a wide terminal whatever script it is in."""
+    for raw in ("english words " * 20, "漢字" * 100):
+        stored = truncate_to_cells(raw, MAX_TITLE_LENGTH)
+        assert cell_len(stored) <= MAX_TITLE_LENGTH
+        assert "…" not in _row(stored, 160)
+
+
+def test_a_truncated_title_ends_in_a_single_ellipsis():
+    """No gap before it when the cut splits a wide character in half."""
+    for title in ("漢字" * 40, "word " * 40):
+        row = _row(title, 100)
+        assert "…" in row and " …" not in row
+        assert "..." not in row

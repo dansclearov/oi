@@ -424,10 +424,11 @@ class ChatSelector:
             # wide characters take two columns each, so a len()-based title
             # column overflows the row and wraps.
             title = (
-                set_cell_size(chat.title, title_col - 3) + "..."
+                set_cell_size(chat.title, title_col - 1).rstrip() + "…"
                 if cell_len(chat.title) > title_col
-                else set_cell_size(chat.title, title_col)
+                else chat.title
             )
+            title = set_cell_size(title, title_col)
             meta = f"[bright_black]{meta_plain}[/bright_black]"
             if selected and not search_mode:
                 return (

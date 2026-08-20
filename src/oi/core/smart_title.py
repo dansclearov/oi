@@ -2,6 +2,8 @@
 
 from typing import Any, Optional, Sequence
 
+from rich.cells import cell_len, set_cell_size
+
 from oi.constants import MAX_TITLE_LENGTH
 from oi.core.message_utils import build_prompt, flatten_history, response_text
 from oi.core.session import Chat
@@ -12,6 +14,18 @@ TITLE_PROMPT_INSTRUCTIONS = (
     "No quotes, no punctuation, just the title."
 )
 TITLE_SAMPLE_MESSAGES = 8
+
+
+def truncate_to_cells(text: str, max_cells: int) -> str:
+    """Cut ``text`` to ``max_cells`` terminal columns.
+
+    Titles are budgeted against the chat selector's title column, which is
+    measured in cells — so the cap has to be too, or a title of wide (CJK)
+    characters stores at twice its budget. Cutting through a wide character
+    leaves ``set_cell_size`` a padding space to strip."""
+    if cell_len(text) <= max_cells:
+        return text
+    return set_cell_size(text, max_cells).rstrip()
 
 
 class SmartTitleGenerator:
@@ -47,6 +61,6 @@ class SmartTitleGenerator:
 
     def _sanitize_title(self, title: str) -> str:
         cleaned = title.strip().strip("\"'").strip()
-        if len(cleaned) > MAX_TITLE_LENGTH:
-            cleaned = cleaned[: MAX_TITLE_LENGTH - 3] + "..."
+        if cell_len(cleaned) > MAX_TITLE_LENGTH:
+            cleaned = truncate_to_cells(cleaned, MAX_TITLE_LENGTH - 1) + "…"
         return cleaned

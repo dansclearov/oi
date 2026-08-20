@@ -33,6 +33,7 @@ from oi.core.message_utils import (
     latest_system_prompt,
 )
 from oi.core.session import Chat
+from oi.core.smart_title import truncate_to_cells
 from oi.exceptions import (
     ChatNotFoundError,
     ModelNotFoundError,
@@ -391,9 +392,9 @@ def _update_title_from_first_user_message(current_chat: Chat) -> None:
         return
 
     first_msg = user_messages[0]
-    current_chat.metadata.title = first_msg.replace("\n", " ").strip()[
-        :MAX_TITLE_LENGTH
-    ]
+    current_chat.metadata.title = truncate_to_cells(
+        first_msg.replace("\n", " ").strip(), MAX_TITLE_LENGTH
+    )
 
 
 def _maybe_generate_smart_title(

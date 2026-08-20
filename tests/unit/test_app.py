@@ -4,15 +4,18 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+from rich.cells import cell_len
 from pydantic_ai.messages import ModelResponse, TextPart
 
 from oi.app import (
     ChatLoopContext,
     _handle_local_command,
+    _update_title_from_first_user_message,
     handle_chat_selection,
     run_chat_loop,
 )
 from oi.config.settings import Config, load_user_config
+from oi.constants import MAX_TITLE_LENGTH
 from oi.core.session import Chat, ChatMetadata
 from oi.exceptions import ChatNotFoundError
 from oi.llm_types import ChatOptions, ModelCapabilities
@@ -459,3 +462,23 @@ def test_run_chat_loop_does_not_touch_chat_on_exit_when_ephemeral():
     run_chat_loop(current_chat, ctx)
 
     chat_manager.save_chat.assert_not_called()
+
+
+def test_first_message_title_is_capped_in_cells():
+    """Wide characters cost two columns, so the cap has to count columns —
+    otherwise a CJK title is stored at twice the chat selector's budget."""
+    chat = Chat(
+        metadata=ChatMetadata(
+            id="c",
+            title="Chat 2026-08-20 10:00",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            model="sonnet",
+            message_count=0,
+        )
+    )
+    chat.append_user_message("漢字" * MAX_TITLE_LENGTH)
+
+    _update_title_from_first_user_message(chat)
+
+    assert cell_len(chat.metadata.title) <= MAX_TITLE_LENGTH

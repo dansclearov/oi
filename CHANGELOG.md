@@ -11,6 +11,12 @@ config/`models.yaml` format, alias names).
 
 ### Fixed
 
+- Chat selector (`oi -r`): titles in CJK and other wide scripts no longer
+  show up truncated with an ellipsis while equivalent latin titles don't —
+  the stored title cap was counted in codepoints (75) while the selector's
+  title column is counted in terminal cells (78), so a wide-script title was
+  stored at up to twice its budget. Truncation is a single `…` now, with no
+  gap before it when the cut splits a wide character.
 - TUI: markdown tables are sized to their content instead of being stretched
   to the full width of the pane.
 - Chat selector (`oi -r`): titles with wide characters (CJK, and any

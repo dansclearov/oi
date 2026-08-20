@@ -2,11 +2,12 @@ from datetime import datetime
 from unittest.mock import Mock
 
 from pydantic_ai.messages import ModelResponse, TextPart
+from rich.cells import cell_len
 
 from oi.constants import MAX_TITLE_LENGTH
 from oi.core.message_utils import flatten_history
 from oi.core.session import Chat, ChatMetadata
-from oi.core.smart_title import SmartTitleGenerator
+from oi.core.smart_title import SmartTitleGenerator, truncate_to_cells
 
 
 def _make_chat() -> Chat:
@@ -47,8 +48,8 @@ def test_generate_builds_prompt_and_sanitizes_title():
     title = generator.generate(chat, llm_client, "sonnet")
 
     assert title is not None
-    assert len(title) == MAX_TITLE_LENGTH
-    assert title.endswith("...")
+    assert cell_len(title) == MAX_TITLE_LENGTH
+    assert title.endswith("…")
 
     prompt_messages, model, options = llm_client.chat.call_args[0]
     assert model == "sonnet"
@@ -64,3 +65,31 @@ def test_generate_builds_prompt_and_sanitizes_title():
     assert "Answer 3" in prompt_text
     assert "Question 4" not in prompt_text
     assert "Answer 4" not in prompt_text
+
+
+def test_sanitized_title_is_capped_in_cells_not_codepoints():
+    """A wide-character title budgets 2 cells per character, like the selector."""
+    generator = SmartTitleGenerator()
+    llm_client = Mock()
+    llm_client.chat.return_value = ModelResponse(
+        parts=[TextPart(content="漢" * MAX_TITLE_LENGTH)]
+    )
+    chat = _make_chat()
+    for i in range(5):
+        chat.append_user_message(f"Question {i}")
+        chat.append_assistant_response(f"Answer {i}")
+
+    title = generator.generate(chat, llm_client, "sonnet")
+
+    assert title is not None
+    assert cell_len(title) == MAX_TITLE_LENGTH
+
+
+def test_truncate_to_cells_leaves_short_text_unpadded():
+    assert truncate_to_cells("short", 20) == "short"
+    assert truncate_to_cells("漢字", 20) == "漢字"
+
+
+def test_truncate_to_cells_drops_the_pad_of_a_split_wide_character():
+    """Cutting through a wide character leaves set_cell_size a padding space."""
+    assert truncate_to_cells("漢字漢字", 5) == "漢字"
