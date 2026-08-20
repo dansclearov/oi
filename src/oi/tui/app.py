@@ -691,6 +691,14 @@ class OiApp(App):
     MarkdownH1 {
         content-align: left middle;
     }
+    /* Size tables to their content instead of the full pane width. Textual's
+       default is `width: 1fr`, which also flips MarkdownTableContent's grid to
+       expand=True; `auto` sizes the columns to the cells and keeps the shrink
+       path for tables wider than the pane. */
+    MarkdownTable {
+        width: auto;
+        max-width: 100%;
+    }
     #input-row {
         /* Top/bottom rules only: no side borders or padding, so the ❯ marker
            column-aligns with the conversation above. */

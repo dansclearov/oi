@@ -11,6 +11,7 @@ from pydantic_ai.messages import (
 )
 from textual.events import Key
 from textual.widgets import Markdown
+from textual.widgets._markdown import MarkdownTable, MarkdownTableContent
 
 from oi.app import ChatLoopContext
 from oi.config.settings import Config, load_user_config
@@ -22,6 +23,7 @@ from oi.tui.vim import Mode as VimMode
 from oi.tui.renderer import ResponseStarted, TextDelta, ThinkingDelta, TuiRenderer
 
 RESPONSE_MD = "# Title\n\nHello **world**\n\n- one\n- two"
+TABLE_MD = "| Model | Provider |\n| --- | --- |\n| opus | anthropic |\n"
 
 
 class FakeLLMClient:
@@ -492,6 +494,24 @@ class TestCtrlC:
                 assert app.is_running
 
         asyncio.run(scenario())
+
+
+def test_tables_are_sized_to_their_content(tmp_path):
+    """A narrow table stays narrow instead of stretching across the pane."""
+
+    async def scenario():
+        app, _, _ = _make_app(tmp_path)
+        async with app.run_test(size=(100, 30)) as pilot:
+            log = app.query_one(ChatLog)
+            await log.mount(Markdown(TABLE_MD))
+            await pilot.pause()
+
+            content = app.query_one(MarkdownTableContent)
+            columns = [cell.region.width for cell in content.children][:3]
+            assert sum(columns) < log.size.width // 2
+            assert app.query_one(MarkdownTable).styles.is_auto_width
+
+    asyncio.run(scenario())
 
 
 def test_markdown_table_cells_have_no_tooltips(tmp_path):

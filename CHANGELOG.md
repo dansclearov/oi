@@ -11,6 +11,8 @@ config/`models.yaml` format, alias names).
 
 ### Fixed
 
+- TUI: markdown tables are sized to their content instead of being stretched
+  to the full width of the pane.
 - Chat selector (`oi -r`): titles with wide characters (CJK, and any
   other double-width script) no longer overflow the row and wrap — the
   title column is measured and padded in terminal cells now.

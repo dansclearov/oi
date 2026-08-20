@@ -347,7 +347,10 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   the history markers) and a 1-row hint line below it (`esc to interrupt`
   while streaming, empty when idle — fixed height so it never shifts layout).
   `ansi-dark` theme +
-  `ansi_*`/`ansi_default` CSS colors keep the terminal palette. Thinking
+  `ansi_*`/`ansi_default` CSS colors keep the terminal palette. Markdown
+  tables get `width: auto` (Textual's default `1fr` stretches them across the
+  pane and flips their grid to `expand`); they still shrink-to-fit when the
+  content is wider than the pane. Thinking
   stays plain grey-italic text (a `Static`, not markdown). The log is a
   fixed-height (`1fr`) `VerticalScroll` with `anchor()`: v8's compositor
   bottom-aligns anchored content even when it's shorter than the container
