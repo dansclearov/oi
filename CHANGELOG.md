@@ -11,6 +11,9 @@ config/`models.yaml` format, alias names).
 
 ### Changed
 
+- Bookmarked chats are marked with `*` in the chat selector (`oi -r`) instead
+  of a star: `★` is an East-Asian-ambiguous-width character, so terminals
+  disagree on whether it takes one cell or two.
 - A shortened chat title now ends in `...`, whether it was shortened to fit
   the title cap or to fit the terminal — the mark means "there was more text"
   either way. Titles cut from a first message used to be shortened silently.

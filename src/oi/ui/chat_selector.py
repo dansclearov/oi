@@ -411,7 +411,7 @@ class ChatSelector:
     ) -> str:
         """Render one chat row. Collapses to a title-forward layout (no date or
         meta) when the full layout would overflow the terminal width."""
-        bookmark_marker = "★" if chat.bookmarked else " "
+        bookmark_marker = "*" if chat.bookmarked else " "
         date_str = chat.updated_at.strftime("%Y-%m-%d %H:%M")
         meta_plain = f"({chat.model}, {chat.message_count} msgs)"
         # Fixed columns: marker+index+bookmark (8), "[date] " (19), a trailing
