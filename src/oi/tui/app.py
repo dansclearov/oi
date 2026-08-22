@@ -746,10 +746,20 @@ class OiApp(App):
 
     BINDINGS = [
         Binding("ctrl+c", "interrupt_or_quit", "Interrupt/quit", priority=True),
+        # Cmd+C, in terminals that forward it to the app when they have no
+        # selection of their own (Ghostty's performable keybinds, kitty).
+        # Priority: ChatInput's TextArea binds super+c too and would consume
+        # it before a screen selection could be copied.
+        Binding("super+c", "copy_selection", show=False, priority=True),
         Binding("escape", "interrupt", show=False),
         Binding("pageup", "scroll_log_up", show=False),
         Binding("pagedown", "scroll_log_down", show=False),
+        # Ctrl+V is the chord Mac terminals leave free (their paste is Cmd+V);
+        # Linux terminals that bind it to paste never deliver it, so it's
+        # inert there and Alt+V stays the Linux chord. Priority: TextArea
+        # binds ctrl+v to its internal-clipboard paste.
         Binding("alt+v", "paste_image", show=False),
+        Binding("ctrl+v", "paste_image", show=False, priority=True),
     ]
 
     def __init__(
@@ -1250,13 +1260,7 @@ class OiApp(App):
             self._turn_worker.cancel()
             return
 
-        selected = self.screen.get_selected_text()
-        if selected:
-            self.copy_to_clipboard(selected)
-            self.clear_selection()
-            self._exit_armed_at = None
-            self._flash_hint("copied to clipboard", HINT_FLASH_SECONDS)
-            self.query_one(ChatInput).focus()
+        if self._copy_selection():
             return
 
         now = monotonic()
@@ -1268,6 +1272,22 @@ class OiApp(App):
             return
         self._exit_armed_at = now
         self._flash_hint("press ctrl+c again to exit", CTRL_C_EXIT_WINDOW)
+
+    def _copy_selection(self) -> bool:
+        """Copy the screen selection if there is one. True when copied."""
+        selected = self.screen.get_selected_text()
+        if not selected:
+            return False
+        self.copy_to_clipboard(selected)
+        self.clear_selection()
+        self._exit_armed_at = None
+        self._flash_hint("copied to clipboard", HINT_FLASH_SECONDS)
+        self.query_one(ChatInput).focus()
+        return True
+
+    def action_copy_selection(self) -> None:
+        """Cmd+C: copy only — never interrupts, never arms the exit."""
+        self._copy_selection()
 
     async def action_quit(self) -> None:
         self._touch_and_exit()

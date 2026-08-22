@@ -78,8 +78,13 @@ class InputHandler:
                 event.app.current_buffer.insert_text(pasted)
 
         if supports_vision:
-
+            # Alt+V, plus Ctrl+V for Mac terminals: their paste chord is
+            # Cmd+V, so Ctrl+V reaches the app there (and their Option key
+            # types special characters instead of sending Alt by default).
+            # Linux terminals that bind Ctrl+V to paste never deliver it, so
+            # the extra binding is inert there.
             @bindings.add("escape", "v")
+            @bindings.add("c-v")
             def _(event):
                 # `add_image` touches pydantic_ai; don't race the warm-up thread.
                 warmup.ensure()

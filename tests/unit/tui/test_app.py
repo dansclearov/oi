@@ -496,6 +496,65 @@ class TestCtrlC:
         asyncio.run(scenario())
 
 
+class TestMacChords:
+    """Cmd+C copy and Ctrl+V image paste, for terminals that forward them."""
+
+    def test_super_c_copies_and_never_arms_the_exit(self, tmp_path):
+        async def scenario():
+            app, chat, ctx = _make_app(tmp_path)
+            copied: list[str] = []
+
+            async with app.run_test() as pilot:
+                app.copy_to_clipboard = copied.append
+                app.screen.get_selected_text = lambda: "selected text"
+
+                await pilot.press("super+c")
+                await pilot.pause()
+                assert copied == ["selected text"]
+
+                # With nothing selected it must do nothing — not arm the exit.
+                app.screen.get_selected_text = lambda: None
+                await pilot.press("super+c")
+                await pilot.press("super+c")
+                await pilot.pause()
+                assert app.is_running
+                assert copied == ["selected text"]
+
+        asyncio.run(scenario())
+
+    def test_ctrl_v_pastes_an_image(self, tmp_path, monkeypatch):
+        async def scenario():
+            from oi.llm_types import ModelCapabilities
+
+            monkeypatch.setattr(
+                "oi.tui.app.read_clipboard_image", lambda: (b"png", "image/png")
+            )
+            app, chat, ctx = _make_app(
+                tmp_path, capabilities=ModelCapabilities(supports_vision=True)
+            )
+            async with app.run_test() as pilot:
+                chat_input = app.query_one(ChatInput)
+                await pilot.press("ctrl+v")
+                await pilot.pause()
+                assert chat_input.text == "[Image #1] "
+
+        asyncio.run(scenario())
+
+    def test_ctrl_v_is_a_no_op_without_vision(self, tmp_path, monkeypatch):
+        async def scenario():
+            monkeypatch.setattr(
+                "oi.tui.app.read_clipboard_image", lambda: (b"png", "image/png")
+            )
+            app, chat, ctx = _make_app(tmp_path)  # default caps: no vision
+            async with app.run_test() as pilot:
+                chat_input = app.query_one(ChatInput)
+                await pilot.press("ctrl+v")
+                await pilot.pause()
+                assert chat_input.text == ""
+
+        asyncio.run(scenario())
+
+
 def test_tables_are_sized_to_their_content(tmp_path):
     """A narrow table stays narrow instead of stretching across the pane."""
 

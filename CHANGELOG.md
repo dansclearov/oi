@@ -9,6 +9,14 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- Mac-friendly key chords, for terminals that forward them: `Ctrl+V` pastes
+  an image from the clipboard (both frontends — Mac terminals keep their own
+  paste on `Cmd+V`, and their Option key doesn't send `Alt+V` by default),
+  and `Cmd+C` copies the selection in the TUI without ever arming the
+  double-press exit that `Ctrl+C` carries.
+
 ### Changed
 
 - Startup is ~4x faster (~600ms less before the UI appears, both frontends):

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -224,5 +225,28 @@ def read_clipboard_image() -> tuple[bytes, str] | None:
                 )
                 if got and got.returncode == 0 and got.stdout:
                     return got.stdout, mime
+
+    if shutil.which("pngpaste"):
+        got = _run_capture(["pngpaste", "-"], timeout=5)
+        if got and got.returncode == 0 and got.stdout:
+            return got.stdout, "image/png"
+
+    if sys.platform == "darwin":
+        # Ships with macOS; prints the clipboard's PNG as «data PNGf<hex>»,
+        # or errors when the clipboard holds no image.
+        got = _run_capture(
+            ["osascript", "-e", "the clipboard as «class PNGf»"], timeout=5
+        )
+        if got and got.returncode == 0:
+            text = got.stdout.decode("utf-8", errors="replace")
+            start = text.find("PNGf")
+            end = text.rfind("»")
+            if start != -1 and end > start:
+                try:
+                    data = bytes.fromhex(text[start + 4 : end])
+                except ValueError:
+                    return None
+                if data:
+                    return data, "image/png"
 
     return None
