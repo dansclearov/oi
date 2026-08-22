@@ -77,6 +77,8 @@ from oi.tui.renderer import (
 )
 from oi.tui.tool_lines import (
     describe_return,
+    extract_web_calls,
+    is_web_wrapper_code,
     recover_args_from_return,
     tool_line_text,
 )
@@ -189,9 +191,14 @@ def _notice_widget(label: LabelStyle, text: str) -> Horizontal | Static:
 
 @dataclass
 class _ToolCallLine:
-    """One mounted native-tool line, updated in place as the call progresses."""
+    """One native-tool line, updated in place as the call progresses.
 
-    widget: Static
+    `widget` stays None while the line has nothing to show yet (a
+    code-execution call whose code is still streaming) or never will (a
+    wrapper block suppressed in favor of the web line it dispatches).
+    """
+
+    widget: Optional[Static]
     tool_name: str
     args: Optional[dict]
 
@@ -818,6 +825,7 @@ class OiApp(App):
         self._response_label: Optional[str] = None
         self._tool_block: Optional[Vertical] = None
         self._tool_lines: dict[str, _ToolCallLine] = {}
+        self._stashed_web_args: list[tuple[str, dict]] = []
         self._turn_marker_shown = False
         self._hint_timer: Optional[Timer] = None
         self._exit_armed_at: Optional[float] = None
@@ -1237,6 +1245,7 @@ class OiApp(App):
         self._active_view = None
         self._tool_block = None
         self._tool_lines = {}
+        self._stashed_web_args = []
         self._turn_marker_shown = False
 
     async def _ensure_response_view(self) -> ResponseView:
@@ -1273,19 +1282,39 @@ class OiApp(App):
         if not self._response_active:
             return
         line = self._tool_lines.get(message.call_id)
-        if line is not None:
-            if message.args is not None:
-                line.args = message.args
-            line.widget.update(tool_line_text(line.tool_name, line.args))
+        if line is None:
+            line = _ToolCallLine(None, message.tool_name, message.args)
+            self._tool_lines[message.call_id] = line
+            if message.tool_name == "code_execution" and message.args is None:
+                # The code is still streaming; materialize (or suppress) once
+                # it arrives — unlike a search, there's no visible wait
+                # between the call part and its args.
+                return
+            if message.args is None and message.from_code:
+                # A call dispatched from inside a code block carries no args;
+                # the wrapper code they were written in stashed them for us.
+                line.args = self._take_stashed_web_args(message.tool_name)
+            await self._mount_tool_line(line)
             return
-        line = _ToolCallLine(
-            Static(
-                tool_line_text(message.tool_name, message.args), classes="tool-line"
-            ),
-            message.tool_name,
-            message.args,
+        if message.args is not None:
+            line.args = message.args
+        if line.tool_name == "code_execution" and line.widget is None:
+            code = str((line.args or {}).get("code", ""))
+            if code:
+                self._stashed_web_args.extend(extract_web_calls(code))
+                if is_web_wrapper_code(code):
+                    # The paired web line tells the whole story; keep the
+                    # entry widgetless so the return is a no-op.
+                    return
+            await self._mount_tool_line(line)
+            return
+        if line.widget is not None:
+            line.widget.update(tool_line_text(line.tool_name, line.args))
+
+    async def _mount_tool_line(self, line: _ToolCallLine) -> None:
+        line.widget = Static(
+            tool_line_text(line.tool_name, line.args), classes="tool-line"
         )
-        self._tool_lines[message.call_id] = line
         if self._tool_block is None:
             # Tool lines sit at the same level as the turn markers, not inside
             # the content column; consecutive calls group into one block. The
@@ -1297,12 +1326,19 @@ class OiApp(App):
             await self._chat_log.mount(self._tool_block)
         await self._tool_block.mount(line.widget)
 
+    def _take_stashed_web_args(self, tool_name: str) -> Optional[dict]:
+        for index, (stashed_name, args) in enumerate(self._stashed_web_args):
+            if stashed_name == tool_name:
+                del self._stashed_web_args[index]
+                return args
+        return None
+
     @on(NativeToolReturn)
     async def _on_native_tool_return(self, message: NativeToolReturn) -> None:
         if not self._response_active:
             return
         line = self._tool_lines.get(message.call_id)
-        if line is None:
+        if line is None or line.widget is None:
             return
         if line.args is None:
             line.args = recover_args_from_return(message.tool_name, message.content)
@@ -1333,6 +1369,7 @@ class OiApp(App):
         self._response_label = None
         self._tool_block = None
         self._tool_lines = {}
+        self._stashed_web_args = []
 
     # --- actions ---------------------------------------------------------
 

@@ -40,8 +40,8 @@ class RecordingRenderer(ResponseRenderer):
     def _finish(self):
         pass
 
-    def _render_native_tool_call(self, call_id, tool_name, args):
-        self.events.append(("call", call_id, tool_name, args))
+    def _render_native_tool_call(self, call_id, tool_name, args, from_code):
+        self.events.append(("call", call_id, tool_name, args, from_code))
 
     def _render_native_tool_return(self, call_id, tool_name, content):
         self.events.append(("return", call_id, tool_name, content))
@@ -60,7 +60,7 @@ def test_anthropic_style_args_stream_as_json_fragments():
 
     call = NativeToolCallPart(tool_name="web_search", args=None, tool_call_id="c1")
     handler.handle_event(PartStartEvent(index=0, part=call))
-    assert events == [("call", "c1", "web_search", None)]
+    assert events == [("call", "c1", "web_search", None, False)]
 
     handler.handle_event(
         PartDeltaEvent(index=0, delta=ToolCallPartDelta(args_delta='{"query": '))
@@ -70,7 +70,7 @@ def test_anthropic_style_args_stream_as_json_fragments():
     handler.handle_event(
         PartDeltaEvent(index=0, delta=ToolCallPartDelta(args_delta='"cats"}'))
     )
-    assert events[-1] == ("call", "c1", "web_search", {"query": "cats"})
+    assert events[-1] == ("call", "c1", "web_search", {"query": "cats"}, False)
 
     results = [{"title": "a", "url": "u"}, {"title": "b", "url": "v"}]
     handler.handle_event(
@@ -90,8 +90,8 @@ def test_anthropic_style_args_stream_as_json_fragments():
         )
     )
     assert events == [
-        ("call", "c1", "web_search", None),
-        ("call", "c1", "web_search", {"query": "cats"}),
+        ("call", "c1", "web_search", None, False),
+        ("call", "c1", "web_search", {"query": "cats"}, False),
         ("return", "c1", "web_search", results),
     ]
 
@@ -120,8 +120,8 @@ def test_openai_style_args_arrive_as_one_dict_delta():
         )
     )
     assert events == [
-        ("call", "ws_1", "web_search", None),
-        ("call", "ws_1", "web_search", args),
+        ("call", "ws_1", "web_search", None, False),
+        ("call", "ws_1", "web_search", args, False),
     ]
 
 
@@ -133,7 +133,7 @@ def test_full_args_at_start_announce_once():
     part = NativeToolCallPart(tool_name="web_search", args=args, tool_call_id="c1")
     handler.handle_event(PartStartEvent(index=0, part=part))
     handler.handle_event(PartEndEvent(index=0, part=part))
-    assert events == [("call", "c1", "web_search", args)]
+    assert events == [("call", "c1", "web_search", args, False)]
 
 
 def test_client_tool_deltas_keep_old_rendering():
@@ -145,3 +145,18 @@ def test_client_tool_deltas_keep_old_rendering():
         )
     )
     assert events == [("tool", 'mytool {"x": 1}')]
+
+
+def test_call_from_code_execution_is_flagged():
+    """Anthropic stamps calls dispatched from inside a code-execution block
+    with their caller in provider_details."""
+    handler, events = make_handler()
+    part = NativeToolCallPart(
+        tool_name="web_search",
+        args=None,
+        tool_call_id="c1",
+        provider_name="anthropic",
+        provider_details={"anthropic_caller": {"type": "code_execution_20250825"}},
+    )
+    handler.handle_event(PartStartEvent(index=0, part=part))
+    assert events == [("call", "c1", "web_search", None, True)]

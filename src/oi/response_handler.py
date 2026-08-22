@@ -29,6 +29,7 @@ class _NativeCall:
 
     call_id: str
     tool_name: str
+    from_code: bool = False
     args_buffer: str = ""
     announced: bool = False
     announced_args: Optional[dict[str, Any]] = field(default=None)
@@ -111,7 +112,13 @@ class ResponseHandler:
         elif isinstance(part, ThinkingPart):
             self.renderer.render_thinking(part.content)
         elif isinstance(part, NativeToolCallPart):
-            call = _NativeCall(call_id=part.tool_call_id, tool_name=part.tool_name)
+            call = _NativeCall(
+                call_id=part.tool_call_id,
+                tool_name=part.tool_name,
+                # Anthropic stamps calls made from inside a code-execution
+                # block with their caller; direct calls carry no marker.
+                from_code="anthropic_caller" in (part.provider_details or {}),
+            )
             self._native_calls[index] = call
             self._announce_native_call(call, _coerce_args(part.args))
         elif isinstance(part, NativeToolReturnPart):
@@ -174,7 +181,9 @@ class ResponseHandler:
             return
         call.announced = True
         call.announced_args = args
-        self.renderer.render_native_tool_call(call.call_id, call.tool_name, args)
+        self.renderer.render_native_tool_call(
+            call.call_id, call.tool_name, args, from_code=call.from_code
+        )
 
     def _apply_native_args_delta(self, call: _NativeCall, args_delta) -> None:
         if isinstance(args_delta, dict):

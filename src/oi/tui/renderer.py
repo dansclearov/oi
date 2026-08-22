@@ -49,14 +49,18 @@ class NativeToolCall(Message):
 
     Posted once when the call part appears (args may be None while the
     provider is still streaming them) and again when the full args are known;
-    `call_id` lets the app update the same line in place.
+    `call_id` lets the app update the same line in place. `from_code` marks a
+    call made from inside a code-execution block.
     """
 
-    def __init__(self, call_id: str, tool_name: str, args: Optional[dict]) -> None:
+    def __init__(
+        self, call_id: str, tool_name: str, args: Optional[dict], from_code: bool
+    ) -> None:
         super().__init__()
         self.call_id = call_id
         self.tool_name = tool_name
         self.args = args
+        self.from_code = from_code
 
 
 class NativeToolReturn(Message):
@@ -106,9 +110,9 @@ class TuiRenderer(ResponseRenderer):
         self._post(ToolLine(text))
 
     def _render_native_tool_call(
-        self, call_id: str, tool_name: str, args: Optional[dict]
+        self, call_id: str, tool_name: str, args: Optional[dict], from_code: bool
     ) -> None:
-        self._post(NativeToolCall(call_id, tool_name, args))
+        self._post(NativeToolCall(call_id, tool_name, args, from_code))
 
     def _render_native_tool_return(
         self, call_id: str, tool_name: str, content: object

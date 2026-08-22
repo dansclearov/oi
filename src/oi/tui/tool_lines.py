@@ -7,6 +7,8 @@ Google `queries`, OpenAI Responses one `web_search` tool with a typed action
 dict), so the description is derived per shape rather than per provider.
 """
 
+import ast
+import re
 from typing import Any, Optional, cast
 
 from rich.text import Text
@@ -126,6 +128,65 @@ def _first_meaningful_line(code: str) -> Optional[str]:
         if not line.startswith(("import ", "from ", "#")):
             return line
     return lines[0] if lines else None
+
+
+_WEB_CALL_RE = re.compile(r"\b(web_search|web_fetch)\s*\(")
+
+
+def extract_web_calls(code: str) -> list[tuple[str, dict[str, Any]]]:
+    """`(tool_name, args)` for each literal web call in a code block.
+
+    Dynamic-filtering code dispatches searches/fetches as
+    `await web_search({"query": ...})`; the call parts those produce carry no
+    args of their own, so the args extracted here are donated to their lines.
+    Non-literal args (a loop variable, an f-string) don't parse and are
+    simply skipped.
+    """
+    calls: list[tuple[str, dict[str, Any]]] = []
+    for match in _WEB_CALL_RE.finditer(code):
+        source = _braced_span(code, match.end())
+        if source is None:
+            continue
+        try:
+            args = ast.literal_eval(source)
+        except (ValueError, SyntaxError):
+            continue
+        if isinstance(args, dict):
+            calls.append((match.group(1), args))
+    return calls
+
+
+def is_web_wrapper_code(code: str) -> bool:
+    """True when the code only dispatches web calls (plus prints/imports).
+
+    Such a block says nothing its paired Web Search/Fetch line won't — the
+    `Code(...)` line is dropped and the web line carries the args instead.
+    """
+    saw_call = False
+    for line in (line.strip() for line in code.splitlines()):
+        if not line or line.startswith(("import ", "from ", "#", "print(")):
+            continue
+        if _WEB_CALL_RE.search(line):
+            saw_call = True
+            continue
+        return False
+    return saw_call
+
+
+def _braced_span(text: str, start: int) -> Optional[str]:
+    """The first balanced `{...}` at or after `start`, or None."""
+    begin = text.find("{", start)
+    if begin == -1:
+        return None
+    depth = 0
+    for index in range(begin, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[begin : index + 1]
+    return None
 
 
 def recover_args_from_return(

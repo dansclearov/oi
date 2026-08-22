@@ -110,3 +110,29 @@ def test_line_text_states():
     # no running-ellipsis, but the completion note still shows.
     argless_done = tool_line_text("web_search", None, "10 results", done=True)
     assert argless_done.plain == "● Web Search · 10 results"
+
+
+def test_extract_web_calls_from_code():
+    from oi.tui.tool_lines import extract_web_calls
+
+    code = (
+        'result = await web_search({"query": "Claude Fable"})\n'
+        "r2 = await web_fetch({'url': 'https://x.io/a'})\n"
+        "r3 = await web_search({'query': q})\n"  # non-literal: skipped
+    )
+    assert extract_web_calls(code) == [
+        ("web_search", {"query": "Claude Fable"}),
+        ("web_fetch", {"url": "https://x.io/a"}),
+    ]
+
+
+def test_is_web_wrapper_code():
+    from oi.tui.tool_lines import is_web_wrapper_code
+
+    assert is_web_wrapper_code(
+        'result = await web_search({"query": "cats"})\nprint(result)'
+    )
+    assert not is_web_wrapper_code(
+        'r1 = await web_fetch({"url": "https://x.io"})\ndata = json.loads(r1)'
+    )
+    assert not is_web_wrapper_code("import json\ndata = json.loads(r1)")

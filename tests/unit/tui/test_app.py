@@ -1128,3 +1128,37 @@ def test_thinking_after_tool_calls_mounts_below_in_order(tmp_path):
         assert second_row.children[0].render().plain == "  "
 
     asyncio.run(_run_search_turn(tmp_path, stream)(check))
+
+
+def test_wrapper_code_collapses_into_the_web_line(tmp_path):
+    """Dynamic-filtering wrapper code (`await web_search({...})`) is not shown
+    as a Code line; its args are donated to the paired argless search line.
+    Code that actually processes data keeps its line."""
+
+    def stream(renderer):
+        renderer.render_native_tool_call("cx", "code_execution", None)
+        renderer.render_native_tool_call(
+            "cx",
+            "code_execution",
+            {
+                "code": 'result = await web_search({"query": "Claude Fable"})\nprint(result)'
+            },
+        )
+        renderer.render_native_tool_call("ws", "web_search", None, from_code=True)
+        renderer.render_native_tool_return("ws", "web_search", [{}] * 8)
+        renderer.render_native_tool_return("cx", "code_execution", {})
+        renderer.render_native_tool_call("cy", "code_execution", None)
+        renderer.render_native_tool_call(
+            "cy", "code_execution", {"code": "import json\ndata = json.loads(r1)"}
+        )
+        renderer.render_native_tool_return("cy", "code_execution", {})
+        renderer.render_text("Answer.")
+
+    def check(app):
+        lines = [w.render().plain for w in app.query(".tool-line").results()]
+        assert lines == [
+            '● Web Search("Claude Fable") · 8 results',
+            "● Code(data = json.loads(r1))",
+        ]
+
+    asyncio.run(_run_search_turn(tmp_path, stream)(check))

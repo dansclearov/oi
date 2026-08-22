@@ -399,11 +399,23 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   web tools, server-side dynamic filtering interleaves `code_execution`
   calls (args `{code:...}`) the model uses to grep search results; a search
   or fetch invoked from inside that code carries no args of its own (the
-  query/URL lives in the code) — a fetch recovers its URL from the return
-  payload (`recover_args_from_return`), a search has nothing recoverable and
-  uses the `done` no-args line state. `Code(...)` shows the first
-  *meaningful* line (imports/comments skipped — filtering snippets routinely
-  open with `import json`). Tool lines are **top-level log rows** (grouped
+  query/URL lives in the code; pydantic-ai marks such calls with
+  `provider_details['anthropic_caller']`, surfaced as `from_code`). A code
+  block that is *only* a web-call wrapper (`result = await
+  web_search({...})` plus prints) is not shown at all: its literal args are
+  extracted (`extract_web_calls`, `ast.literal_eval` so Python and JSON
+  quoting both parse) and donated to the paired `from_code` line, collapsing
+  the wrapper+search pair into one `Web Search("query") · N results` — the
+  same shape Claude Code shows (CC's WebSearch/WebFetch are client-side
+  wrapper tools, so it never has this duplication problem). Code lines are
+  materialized only once their args arrive (no pending `Code…` state — args
+  finish streaming before the container runs, so nothing is ever awaited on
+  a hidden line), which is what lets a wrapper be suppressed without
+  mount-then-remove flicker. A non-wrapper block keeps its `Code(...)` line
+  showing the first *meaningful* line (imports/comments skipped — filtering
+  snippets routinely open with `import json`); argless fetches also recover
+  their URL from the return payload (`recover_args_from_return`), argless
+  searches with nothing to donate fall back to the `done` no-args state. Tool lines are **top-level log rows** (grouped
   consecutively into a `.tool-block`, one blank line between them), so their
   green `●` column-aligns with the turn markers CC-style — a tool call ends
   the open content segment and later text/thinking starts a new segment row
