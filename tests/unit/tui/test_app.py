@@ -1025,11 +1025,10 @@ def test_vim_line_delete_resizes_the_input_in_the_painted_frame(tmp_path):
     asyncio.run(scenario())
 
 
-def test_native_tool_lines_update_in_place_and_split_markdown(tmp_path):
-    """A search call renders as one line updated through its lifecycle, and
-    text arriving after it mounts as a new Markdown below, keeping order."""
+def _run_search_turn(tmp_path, stream):
+    """Run one fake turn that drives `stream(renderer)` and return the app."""
 
-    async def scenario():
+    async def scenario(result):
         app, chat, ctx = _make_app(tmp_path)
 
         async def searching_chat_async(
@@ -1043,13 +1042,9 @@ def test_native_tool_lines_update_in_place_and_split_markdown(tmp_path):
             assert renderer_factory is not None
             renderer = renderer_factory(ctx.llm_client.capabilities, options)
             renderer.start_response()
-            renderer.render_text("Let me check.")
-            renderer.render_native_tool_call("c1", "web_search", None)
-            renderer.render_native_tool_call("c1", "web_search", {"query": "cats"})
-            renderer.render_native_tool_return("c1", "web_search", [{}, {}])
-            renderer.render_text("Answer.")
+            stream(renderer)
             renderer.finish_response()
-            return ModelResponse(parts=[TextPart(content="Let me check.Answer.")])
+            return ModelResponse(parts=[TextPart(content="x")])
 
         ctx.llm_client.chat_async = searching_chat_async
 
@@ -1060,19 +1055,67 @@ def test_native_tool_lines_update_in_place_and_split_markdown(tmp_path):
             await app.workers.wait_for_complete()
             await pilot.pause()
             await pilot.pause()
+            result(app)
 
-            view = app.query_one(ResponseView)
-            tool_lines = view.query(".tool-line").results()
-            (tool_line,) = tool_lines
-            assert tool_line.render().plain == '● Web Search("cats") · 2 results'
+    return scenario
 
-            markdowns = list(view.query(Markdown).results())
-            assert len(markdowns) == 2
-            assert markdowns[0].source == "Let me check."
-            assert markdowns[1].source == "Answer."
 
-            children = [child for child in view.children]
-            assert children.index(markdowns[0]) < children.index(tool_line)
-            assert children.index(tool_line) < children.index(markdowns[1])
+def test_native_tool_lines_are_top_level_and_update_in_place(tmp_path):
+    """A search call renders as one gutter-level line (a sibling of the turn
+    rows, not inside the content column) updated through its lifecycle, and
+    text after it mounts as a new segment row below, keeping order."""
 
-    asyncio.run(scenario())
+    def stream(renderer):
+        renderer.render_text("Let me check.")
+        renderer.render_native_tool_call("c1", "web_search", None)
+        renderer.render_native_tool_call("c1", "web_search", {"query": "cats"})
+        renderer.render_native_tool_return("c1", "web_search", [{}, {}])
+        renderer.render_text("Answer.")
+
+    def check(app):
+        (tool_line,) = app.query(".tool-line").results()
+        assert tool_line.render().plain == '● Web Search("cats") · 2 results'
+        (block,) = app.query(".tool-block").results()
+        assert tool_line in block.children
+        assert not app.query_one(ResponseView).query(".tool-line")
+
+        views = list(app.query(ResponseView).results())
+        assert len(views) == 2
+        assert views[0].query_one(Markdown).source == "Let me check."
+        assert views[1].query_one(Markdown).source == "Answer."
+
+        log = app.query_one(ChatLog)
+        rows = [w for w in log.children if w.has_class("row") or w is block]
+        assert rows.index(block) == len(rows) - 2  # between the two turn rows
+
+    asyncio.run(_run_search_turn(tmp_path, stream)(check))
+
+
+def test_thinking_after_tool_calls_mounts_below_in_order(tmp_path):
+    """Interleaved thinking reads top to bottom: a trace resuming after a
+    search continues in a new block below it, not in the widget at the top."""
+
+    def stream(renderer):
+        renderer.render_thinking("first thought")
+        renderer.render_native_tool_call("c1", "web_search", {"query": "cats"})
+        renderer.render_thinking("second thought")
+        renderer.render_text("Answer.")
+
+    def check(app):
+        views = list(app.query(ResponseView).results())
+        assert len(views) == 2
+        first = views[0].query_one(".thinking")
+        second = views[1].query_one(".thinking")
+        assert "first thought" in str(first.render())
+        assert "second thought" in str(second.render())
+        assert "first" not in str(second.render())
+
+        (block,) = app.query(".tool-block").results()
+        log = app.query_one(ChatLog)
+        children = list(log.children)
+        first_row = first.ancestors[1]  # content column -> row
+        second_row = second.ancestors[1]
+        assert children.index(first_row) < children.index(block)
+        assert children.index(block) < children.index(second_row)
+
+    asyncio.run(_run_search_turn(tmp_path, stream)(check))

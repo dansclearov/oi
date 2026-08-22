@@ -193,13 +193,12 @@ class _ToolCallLine:
 
 
 class ResponseView(Vertical):
-    """The content column of one assistant response.
+    """The content column of one assistant segment (between tool blocks).
 
-    Sections mount lazily in arrival order: thinking trace (plain grey
-    italics, exactly like the scrollback renderer), tool lines, and the
-    markdown body fed through a `MarkdownStream`. A tool line arriving
-    mid-markdown closes the open stream so following text mounts as a new
-    `Markdown` below it, keeping the on-screen order the arrival order.
+    Thinking and markdown mount in arrival order: a thinking trace arriving
+    after markdown started closes the stream and continues in a new grey
+    block below (and vice versa), so interleaved-thinking models read top to
+    bottom instead of updating an earlier widget retroactively.
     """
 
     def __init__(self) -> None:
@@ -208,17 +207,19 @@ class ResponseView(Vertical):
         self._thinking_text = ""
         self._markdown: Optional[Markdown] = None
         self._stream: Optional[MarkdownStream] = None
-        self._tool_calls: dict[str, _ToolCallLine] = {}
 
     async def append_thinking(self, text: str) -> None:
         if self._thinking is None:
+            await self.end_stream()
             self._thinking = Static(classes="thinking")
+            self._thinking_text = ""
             await self.mount(self._thinking)
         self._thinking_text += text
         self._thinking.update(Text(self._thinking_text.rstrip()))
 
     async def write_text(self, text: str) -> None:
         if self._markdown is None:
+            self._thinking = None  # later thinking continues in a new block
             self._markdown = Markdown()
             await self.mount(self._markdown)
             self._stream = Markdown.get_stream(self._markdown)
@@ -228,46 +229,14 @@ class ResponseView(Vertical):
     async def add_tool_line(self, text: str) -> None:
         await self.mount(Static(Text(f"tool: {text}"), classes="tool"))
 
-    async def show_native_tool(
-        self, call_id: str, tool_name: str, args: Optional[dict]
-    ) -> None:
-        line = self._tool_calls.get(call_id)
-        if line is None:
-            line = _ToolCallLine(Static(classes="tool-line"), tool_name, args)
-            self._tool_calls[call_id] = line
-            line.widget.update(tool_line_text(tool_name, args))
-            await self._close_markdown()
-            await self.mount(line.widget)
-            return
-        if args is not None:
-            line.args = args
-        line.widget.update(tool_line_text(line.tool_name, line.args))
-
-    async def finish_native_tool(
-        self, call_id: str, tool_name: str, content: object
-    ) -> None:
-        line = self._tool_calls.get(call_id)
-        if line is None:
-            return
-        line.widget.update(
-            tool_line_text(
-                line.tool_name,
-                line.args,
-                describe_return(tool_name, content),
-                done=True,
-            )
-        )
-
-    async def _close_markdown(self) -> None:
+    async def end_stream(self) -> None:
         if self._stream is not None:
             await self._stream.stop()
         self._stream = None
         self._markdown = None
 
     async def finalize(self, *, interrupted: bool) -> None:
-        if self._stream is not None:
-            await self._stream.stop()
-            self._stream = None
+        await self.end_stream()
         if interrupted:
             await self.mount(Static(Text("[interrupted]"), classes="interrupted"))
 
@@ -726,7 +695,13 @@ class OiApp(App):
         height: auto;
         margin-bottom: 1;
     }
+    /* The margin separates thinking from what follows within the segment;
+       when nothing does, it would stack with the row's own bottom margin. */
+    .content > .thinking:last-child {
+        margin-bottom: 0;
+    }
     .tool { color: ansi_magenta; height: auto; }
+    .tool-block { height: auto; margin-bottom: 1; }
     .tool-line { height: auto; }
     .interrupted { color: ansi_bright_black; height: auto; }
     Markdown {
@@ -837,6 +812,8 @@ class OiApp(App):
         self._active_view: Optional[ResponseView] = None
         self._response_active = False
         self._response_label: Optional[str] = None
+        self._tool_block: Optional[Vertical] = None
+        self._tool_lines: dict[str, _ToolCallLine] = {}
         self._hint_timer: Optional[Timer] = None
         self._exit_armed_at: Optional[float] = None
         self._vim_mode: Optional[VimMode] = None
@@ -1253,11 +1230,16 @@ class OiApp(App):
         self._response_active = True
         self._response_label = message.label_text
         self._active_view = None
+        self._tool_block = None
+        self._tool_lines = {}
 
     async def _ensure_response_view(self) -> ResponseView:
         if self._active_view is None:
             view = ResponseView()
             self._active_view = view
+            # Content after a tool block is a new segment row; a later tool
+            # call then starts a fresh block below it, preserving order.
+            self._tool_block = None
             await self._chat_log.mount(
                 _row(AI_LABEL, view, label_text=self._response_label)
             )
@@ -1280,17 +1262,48 @@ class OiApp(App):
 
     @on(NativeToolCall)
     async def _on_native_tool_call(self, message: NativeToolCall) -> None:
-        if self._response_active:
-            await (await self._ensure_response_view()).show_native_tool(
-                message.call_id, message.tool_name, message.args
-            )
+        if not self._response_active:
+            return
+        line = self._tool_lines.get(message.call_id)
+        if line is not None:
+            if message.args is not None:
+                line.args = message.args
+            line.widget.update(tool_line_text(line.tool_name, line.args))
+            return
+        line = _ToolCallLine(
+            Static(
+                tool_line_text(message.tool_name, message.args), classes="tool-line"
+            ),
+            message.tool_name,
+            message.args,
+        )
+        self._tool_lines[message.call_id] = line
+        if self._tool_block is None:
+            # Tool lines sit at the same level as the turn markers, not inside
+            # the content column; consecutive calls group into one block. The
+            # open segment ends here so later text/thinking mounts below.
+            if self._active_view is not None:
+                await self._active_view.end_stream()
+                self._active_view = None
+            self._tool_block = Vertical(classes="tool-block")
+            await self._chat_log.mount(self._tool_block)
+        await self._tool_block.mount(line.widget)
 
     @on(NativeToolReturn)
     async def _on_native_tool_return(self, message: NativeToolReturn) -> None:
-        if self._response_active:
-            await (await self._ensure_response_view()).finish_native_tool(
-                message.call_id, message.tool_name, message.content
+        if not self._response_active:
+            return
+        line = self._tool_lines.get(message.call_id)
+        if line is None:
+            return
+        line.widget.update(
+            tool_line_text(
+                line.tool_name,
+                line.args,
+                describe_return(message.tool_name, message.content),
+                done=True,
             )
+        )
 
     @on(Notice)
     async def _on_notice(self, message: Notice) -> None:
@@ -1308,6 +1321,8 @@ class OiApp(App):
             await self._active_view.finalize(interrupted=message.interrupted)
             self._active_view = None
         self._response_label = None
+        self._tool_block = None
+        self._tool_lines = {}
 
     # --- actions ---------------------------------------------------------
 

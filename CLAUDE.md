@@ -399,11 +399,16 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   web tools, server-side dynamic filtering interleaves `code_execution`
   calls (args `{code:...}`) the model uses to grep search results; a search
   invoked from inside that code carries no args of its own (the query lives
-  in the code), which is what the `done` no-args line state is for. A tool
-  line arriving mid-markdown closes the open `MarkdownStream` so later text
-  mounts as a new `Markdown` below it (arrival order == screen order). The
-  scrollback renderer keeps suppressing all of this — tried, nothing looked
-  good in that UI.
+  in the code), which is what the `done` no-args line state is for. Tool
+  lines are **top-level log rows** (grouped consecutively into a
+  `.tool-block`), so their green `●` column-aligns with the turn markers
+  CC-style — a tool call ends the open content segment and later
+  text/thinking starts a new `●` row below it. Within a segment,
+  `ResponseView` mounts thinking and markdown in arrival order too (a trace
+  resuming after text or tools continues in a new grey block below, never
+  appending to the widget at the top), so interleaved-thinking turns read
+  strictly top to bottom. The scrollback renderer keeps suppressing all of
+  this — tried, nothing looked good in that UI.
 - **Image paste**: `Alt+V` or `Ctrl+V` (app bindings, no-op without `supports_vision`; `Ctrl+V` is priority to pre-empt TextArea's internal-clipboard paste, and exists for Mac terminals — see the paste-pills section)
   reads the clipboard via `ui/image_paste.py:read_clipboard_image` in a
   thread; `ChatInput` owns the images. `attach_image` inserts a literal
