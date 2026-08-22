@@ -7,7 +7,7 @@ Google `queries`, OpenAI Responses one `web_search` tool with a typed action
 dict), so the description is derived per shape rather than per provider.
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from rich.text import Text
 
@@ -113,8 +113,31 @@ def _describe_code_execution(args: dict[str, Any]) -> Optional[str]:
         return f"Code({_shorten(detail)})"
     code = args.get("code")
     if code:
-        first_line = str(code).strip().splitlines()
-        return f"Code({_shorten(first_line[0])})" if first_line else None
+        line = _first_meaningful_line(str(code))
+        return f"Code({_shorten(line)})" if line else None
+    return None
+
+
+def _first_meaningful_line(code: str) -> Optional[str]:
+    """The first line that says what the code *does* — dynamic-filtering
+    snippets routinely open with imports, which describe nothing."""
+    lines = [line.strip() for line in code.splitlines() if line.strip()]
+    for line in lines:
+        if not line.startswith(("import ", "from ", "#")):
+            return line
+    return lines[0] if lines else None
+
+
+def recover_args_from_return(
+    tool_name: str, content: object
+) -> Optional[dict[str, Any]]:
+    """Display args salvaged from the return payload, for calls that carried
+    none — a fetch driven from inside a code-execution block keeps its URL in
+    the code, but the result still names the page it retrieved."""
+    if tool_name == "web_fetch" and isinstance(content, dict):
+        url = cast("dict[str, Any]", content).get("url")
+        if url:
+            return {"url": url}
     return None
 
 

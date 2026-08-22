@@ -75,7 +75,11 @@ from oi.tui.renderer import (
     ToolLine,
     TuiRenderer,
 )
-from oi.tui.tool_lines import describe_return, tool_line_text
+from oi.tui.tool_lines import (
+    describe_return,
+    recover_args_from_return,
+    tool_line_text,
+)
 from oi import warmup
 from oi.ui.image_paste import read_clipboard_image
 from oi.ui.labels import (
@@ -701,8 +705,8 @@ class OiApp(App):
         margin-bottom: 0;
     }
     .tool { color: ansi_magenta; height: auto; }
-    .tool-block { height: auto; margin-bottom: 1; }
-    .tool-line { height: auto; }
+    .tool-block { height: auto; }
+    .tool-line { height: auto; margin-bottom: 1; }
     .interrupted { color: ansi_bright_black; height: auto; }
     Markdown {
         padding: 0;
@@ -814,6 +818,7 @@ class OiApp(App):
         self._response_label: Optional[str] = None
         self._tool_block: Optional[Vertical] = None
         self._tool_lines: dict[str, _ToolCallLine] = {}
+        self._turn_marker_shown = False
         self._hint_timer: Optional[Timer] = None
         self._exit_armed_at: Optional[float] = None
         self._vim_mode: Optional[VimMode] = None
@@ -1232,6 +1237,7 @@ class OiApp(App):
         self._active_view = None
         self._tool_block = None
         self._tool_lines = {}
+        self._turn_marker_shown = False
 
     async def _ensure_response_view(self) -> ResponseView:
         if self._active_view is None:
@@ -1240,9 +1246,11 @@ class OiApp(App):
             # Content after a tool block is a new segment row; a later tool
             # call then starts a fresh block below it, preserving order.
             self._tool_block = None
-            await self._chat_log.mount(
-                _row(AI_LABEL, view, label_text=self._response_label)
-            )
+            # One marker per turn: continuation segments keep the indent but
+            # not the dot.
+            label_text = "  " if self._turn_marker_shown else self._response_label
+            self._turn_marker_shown = True
+            await self._chat_log.mount(_row(AI_LABEL, view, label_text=label_text))
         return self._active_view
 
     @on(TextDelta)
@@ -1296,6 +1304,8 @@ class OiApp(App):
         line = self._tool_lines.get(message.call_id)
         if line is None:
             return
+        if line.args is None:
+            line.args = recover_args_from_return(message.tool_name, message.content)
         line.widget.update(
             tool_line_text(
                 line.tool_name,

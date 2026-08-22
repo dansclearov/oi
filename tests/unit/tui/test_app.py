@@ -1070,13 +1070,18 @@ def test_native_tool_lines_are_top_level_and_update_in_place(tmp_path):
         renderer.render_native_tool_call("c1", "web_search", None)
         renderer.render_native_tool_call("c1", "web_search", {"query": "cats"})
         renderer.render_native_tool_return("c1", "web_search", [{}, {}])
+        # An argless fetch (driven from a code-execution block): the URL is
+        # recovered from the return payload.
+        renderer.render_native_tool_call("c2", "web_fetch", None)
+        renderer.render_native_tool_return("c2", "web_fetch", {"url": "https://x.io/a"})
         renderer.render_text("Answer.")
 
     def check(app):
-        (tool_line,) = app.query(".tool-line").results()
-        assert tool_line.render().plain == '● Web Search("cats") · 2 results'
+        search_line, fetch_line = app.query(".tool-line").results()
+        assert search_line.render().plain == '● Web Search("cats") · 2 results'
+        assert fetch_line.render().plain == "● Fetch(https://x.io/a)"
         (block,) = app.query(".tool-block").results()
-        assert tool_line in block.children
+        assert search_line in block.children
         assert not app.query_one(ResponseView).query(".tool-line")
 
         views = list(app.query(ResponseView).results())
@@ -1117,5 +1122,9 @@ def test_thinking_after_tool_calls_mounts_below_in_order(tmp_path):
         second_row = second.ancestors[1]
         assert children.index(first_row) < children.index(block)
         assert children.index(block) < children.index(second_row)
+
+        # One marker per turn: the continuation row keeps the indent only.
+        assert first_row.children[0].render().plain == "● "
+        assert second_row.children[0].render().plain == "  "
 
     asyncio.run(_run_search_turn(tmp_path, stream)(check))

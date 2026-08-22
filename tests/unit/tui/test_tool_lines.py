@@ -1,6 +1,11 @@
 """Formatting of native tool call lines across provider arg shapes."""
 
-from oi.tui.tool_lines import describe_call, describe_return, tool_line_text
+from oi.tui.tool_lines import (
+    describe_call,
+    describe_return,
+    recover_args_from_return,
+    tool_line_text,
+)
 
 
 def test_web_search_query_anthropic_xai():
@@ -52,6 +57,27 @@ def test_code_execution_variants():
     assert describe_call("code_execution", {"code": "print(1)\nprint(2)"}) == (
         "Code(print(1))"
     )
+    # Imports and comments say nothing about what the code does; show the
+    # first line that acts. All-boilerplate code falls back to its first line.
+    assert (
+        describe_call(
+            "code_execution",
+            {"code": "import json\n# parse it\nr1p = json.loads(r1)"},
+        )
+        == "Code(r1p = json.loads(r1))"
+    )
+    assert describe_call("code_execution", {"code": "import json"}) == (
+        "Code(import json)"
+    )
+
+
+def test_fetch_url_recovered_from_return_content():
+    # A fetch driven from inside a code-execution block carries no args of
+    # its own, but the return payload names the retrieved page.
+    content = {"type": "web_fetch_result", "url": "https://x.io/a", "content": {}}
+    assert recover_args_from_return("web_fetch", content) == {"url": "https://x.io/a"}
+    assert recover_args_from_return("web_search", [{}, {}]) is None
+    assert recover_args_from_return("web_fetch", None) is None
 
 
 def test_unknown_args_are_pending():
