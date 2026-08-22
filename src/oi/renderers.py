@@ -1,6 +1,7 @@
 """Output renderers for streaming LLM responses."""
 
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from rich.console import Console
 from rich.markup import escape
@@ -65,6 +66,27 @@ class ResponseRenderer(ABC):
         self.tool_output_started = True
         self._render_tool(text)
 
+    def render_native_tool_call(
+        self, call_id: str, tool_name: str, args: Optional[dict]
+    ) -> None:
+        """Render a server-side tool call starting, or its args resolving.
+
+        Called once when the call part appears (args may still be None) and
+        again when the full arguments are known, keyed by `call_id` so the
+        renderer can update the same line in place.
+        """
+        if self.options.silent:
+            return
+        self._render_native_tool_call(call_id, tool_name, args)
+
+    def render_native_tool_return(
+        self, call_id: str, tool_name: str, content: object
+    ) -> None:
+        """Render a server-side tool call completing."""
+        if self.options.silent:
+            return
+        self._render_native_tool_return(call_id, tool_name, content)
+
     def finish_response(self) -> None:
         """Finalize the response rendering."""
         if self.was_interrupted:
@@ -114,6 +136,17 @@ class ResponseRenderer(ABC):
 
     @abstractmethod
     def _render_tool(self, text: str) -> None: ...
+
+    def _render_native_tool_call(
+        self, call_id: str, tool_name: str, args: Optional[dict]
+    ) -> None:
+        """Server-side tool activity renders in the TUI only; the scrollback
+        frontend stays quiet (nothing looked good in its UI)."""
+
+    def _render_native_tool_return(
+        self, call_id: str, tool_name: str, content: object
+    ) -> None:
+        pass
 
     @abstractmethod
     def _begin_thinking_section(self) -> None: ...

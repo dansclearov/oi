@@ -11,6 +11,11 @@ config/`models.yaml` format, alias names).
 
 ### Added
 
+- The TUI now shows server-side tool activity while a search-enabled model
+  works: one line per call — `Web Search("query")`, `Fetch(url)`,
+  `Code(...)` — updated in place as the query streams in and the results
+  land, so long search turns are no longer a silent wait.
+
 - Mac-friendly key chords, for terminals that forward them: `Ctrl+V` pastes
   an image from the clipboard (both frontends — Mac terminals keep their own
   paste on `Cmd+V`, and their Option key doesn't send `Alt+V` by default),

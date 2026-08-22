@@ -1023,3 +1023,56 @@ def test_vim_line_delete_resizes_the_input_in_the_painted_frame(tmp_path):
             assert frames[-1][0] == 2
 
     asyncio.run(scenario())
+
+
+def test_native_tool_lines_update_in_place_and_split_markdown(tmp_path):
+    """A search call renders as one line updated through its lifecycle, and
+    text arriving after it mounts as a new Markdown below, keeping order."""
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+
+        async def searching_chat_async(
+            messages,
+            model_name_or_alias,
+            options=None,
+            *,
+            capabilities_override=None,
+            renderer_factory=None,
+        ):
+            assert renderer_factory is not None
+            renderer = renderer_factory(ctx.llm_client.capabilities, options)
+            renderer.start_response()
+            renderer.render_text("Let me check.")
+            renderer.render_native_tool_call("c1", "web_search", None)
+            renderer.render_native_tool_call("c1", "web_search", {"query": "cats"})
+            renderer.render_native_tool_return("c1", "web_search", [{}, {}])
+            renderer.render_text("Answer.")
+            renderer.finish_response()
+            return ModelResponse(parts=[TextPart(content="Let me check.Answer.")])
+
+        ctx.llm_client.chat_async = searching_chat_async
+
+        async with app.run_test() as pilot:
+            app.query_one(ChatInput).insert("what about cats")
+            await pilot.press("enter")
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.pause()
+
+            view = app.query_one(ResponseView)
+            tool_lines = view.query(".tool-line").results()
+            (tool_line,) = tool_lines
+            assert tool_line.render().plain == '● Web Search("cats") · 2 results'
+
+            markdowns = list(view.query(Markdown).results())
+            assert len(markdowns) == 2
+            assert markdowns[0].source == "Let me check."
+            assert markdowns[1].source == "Answer."
+
+            children = [child for child in view.children]
+            assert children.index(markdowns[0]) < children.index(tool_line)
+            assert children.index(tool_line) < children.index(markdowns[1])
+
+    asyncio.run(scenario())

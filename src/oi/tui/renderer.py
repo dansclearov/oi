@@ -44,6 +44,31 @@ class ToolLine(Message):
         self.text = text
 
 
+class NativeToolCall(Message):
+    """A server-side tool call started or its args resolved.
+
+    Posted once when the call part appears (args may be None while the
+    provider is still streaming them) and again when the full args are known;
+    `call_id` lets the app update the same line in place.
+    """
+
+    def __init__(self, call_id: str, tool_name: str, args: Optional[dict]) -> None:
+        super().__init__()
+        self.call_id = call_id
+        self.tool_name = tool_name
+        self.args = args
+
+
+class NativeToolReturn(Message):
+    """A server-side tool call completed."""
+
+    def __init__(self, call_id: str, tool_name: str, content: object) -> None:
+        super().__init__()
+        self.call_id = call_id
+        self.tool_name = tool_name
+        self.content = content
+
+
 class TuiRenderer(ResponseRenderer):
     """Forwards streamed parts to the app instead of printing.
 
@@ -79,6 +104,16 @@ class TuiRenderer(ResponseRenderer):
 
     def _render_tool(self, text: str) -> None:
         self._post(ToolLine(text))
+
+    def _render_native_tool_call(
+        self, call_id: str, tool_name: str, args: Optional[dict]
+    ) -> None:
+        self._post(NativeToolCall(call_id, tool_name, args))
+
+    def _render_native_tool_return(
+        self, call_id: str, tool_name: str, content: object
+    ) -> None:
+        self._post(NativeToolReturn(call_id, tool_name, content))
 
     def _begin_thinking_section(self) -> None:
         # Thinking renders in its own widget; no separator needed.

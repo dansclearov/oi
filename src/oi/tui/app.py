@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from time import monotonic
 from typing import TYPE_CHECKING, Optional, Sequence, Union, cast
 
@@ -67,12 +67,15 @@ from oi.tui.slash_menu import SlashMenu
 from oi.tui.vim import Mode as VimMode
 from oi.tui.vim import VimHandler
 from oi.tui.renderer import (
+    NativeToolCall,
+    NativeToolReturn,
     ResponseStarted,
     TextDelta,
     ThinkingDelta,
     ToolLine,
     TuiRenderer,
 )
+from oi.tui.tool_lines import describe_return, tool_line_text
 from oi import warmup
 from oi.ui.image_paste import read_clipboard_image
 from oi.ui.labels import (
@@ -180,12 +183,23 @@ def _notice_widget(label: LabelStyle, text: str) -> Horizontal | Static:
     return Static(Text(text), classes=f"notice {LABEL_CSS[label]}")
 
 
+@dataclass
+class _ToolCallLine:
+    """One mounted native-tool line, updated in place as the call progresses."""
+
+    widget: Static
+    tool_name: str
+    args: Optional[dict]
+
+
 class ResponseView(Vertical):
     """The content column of one assistant response.
 
     Sections mount lazily in arrival order: thinking trace (plain grey
     italics, exactly like the scrollback renderer), tool lines, and the
-    markdown body fed through a `MarkdownStream`.
+    markdown body fed through a `MarkdownStream`. A tool line arriving
+    mid-markdown closes the open stream so following text mounts as a new
+    `Markdown` below it, keeping the on-screen order the arrival order.
     """
 
     def __init__(self) -> None:
@@ -194,6 +208,7 @@ class ResponseView(Vertical):
         self._thinking_text = ""
         self._markdown: Optional[Markdown] = None
         self._stream: Optional[MarkdownStream] = None
+        self._tool_calls: dict[str, _ToolCallLine] = {}
 
     async def append_thinking(self, text: str) -> None:
         if self._thinking is None:
@@ -212,6 +227,42 @@ class ResponseView(Vertical):
 
     async def add_tool_line(self, text: str) -> None:
         await self.mount(Static(Text(f"tool: {text}"), classes="tool"))
+
+    async def show_native_tool(
+        self, call_id: str, tool_name: str, args: Optional[dict]
+    ) -> None:
+        line = self._tool_calls.get(call_id)
+        if line is None:
+            line = _ToolCallLine(Static(classes="tool-line"), tool_name, args)
+            self._tool_calls[call_id] = line
+            line.widget.update(tool_line_text(tool_name, args))
+            await self._close_markdown()
+            await self.mount(line.widget)
+            return
+        if args is not None:
+            line.args = args
+        line.widget.update(tool_line_text(line.tool_name, line.args))
+
+    async def finish_native_tool(
+        self, call_id: str, tool_name: str, content: object
+    ) -> None:
+        line = self._tool_calls.get(call_id)
+        if line is None:
+            return
+        line.widget.update(
+            tool_line_text(
+                line.tool_name,
+                line.args,
+                describe_return(tool_name, content),
+                done=True,
+            )
+        )
+
+    async def _close_markdown(self) -> None:
+        if self._stream is not None:
+            await self._stream.stop()
+        self._stream = None
+        self._markdown = None
 
     async def finalize(self, *, interrupted: bool) -> None:
         if self._stream is not None:
@@ -676,6 +727,7 @@ class OiApp(App):
         margin-bottom: 1;
     }
     .tool { color: ansi_magenta; height: auto; }
+    .tool-line { height: auto; }
     .interrupted { color: ansi_bright_black; height: auto; }
     Markdown {
         padding: 0;
@@ -1225,6 +1277,20 @@ class OiApp(App):
     async def _on_tool_line(self, message: ToolLine) -> None:
         if self._response_active:
             await (await self._ensure_response_view()).add_tool_line(message.text)
+
+    @on(NativeToolCall)
+    async def _on_native_tool_call(self, message: NativeToolCall) -> None:
+        if self._response_active:
+            await (await self._ensure_response_view()).show_native_tool(
+                message.call_id, message.tool_name, message.args
+            )
+
+    @on(NativeToolReturn)
+    async def _on_native_tool_return(self, message: NativeToolReturn) -> None:
+        if self._response_active:
+            await (await self._ensure_response_view()).finish_native_tool(
+                message.call_id, message.tool_name, message.content
+            )
 
     @on(Notice)
     async def _on_notice(self, message: Notice) -> None:

@@ -382,6 +382,28 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   predicate the prompt_toolkit completer uses). Tab/Ctrl+N/Ctrl+P are
   intercepted in `ChatInput._on_key` and posted as semantic `MenuKey`
   messages for the app to act on.
+- **Native tool lines** (`tui/tool_lines.py`, TUI-only): server-side tool
+  activity (web search / web fetch / code execution) renders as one green-dot
+  line per call — `● Web Search("query")`, `Fetch(url)`, `Code(...)` —
+  updated in place through the call's lifecycle (dim `Web Search…` while args
+  are unknown, description once they parse, dim ` · N results` from the
+  return part). `ResponseHandler` assembles the calls from stream events
+  keyed by part index: providers differ in *when* args arrive — Anthropic
+  streams them as JSON string fragments right after the call part (so the
+  query is on screen *during* the server-side wait), OpenAI Responses sends
+  one dict delta only at `output_item.done` (after the wait), xAI/Gemini-3
+  deliver full args on the call part, pre-3 Gemini and OpenRouter emit
+  nothing mid-stream (no lines — fine). Don't wait for `PartEndEvent` to
+  read args: pydantic-ai only emits it when the *next* part starts, which
+  for a search is the result — after the wait. With Anthropic's `20260209`
+  web tools, server-side dynamic filtering interleaves `code_execution`
+  calls (args `{code:...}`) the model uses to grep search results; a search
+  invoked from inside that code carries no args of its own (the query lives
+  in the code), which is what the `done` no-args line state is for. A tool
+  line arriving mid-markdown closes the open `MarkdownStream` so later text
+  mounts as a new `Markdown` below it (arrival order == screen order). The
+  scrollback renderer keeps suppressing all of this — tried, nothing looked
+  good in that UI.
 - **Image paste**: `Alt+V` or `Ctrl+V` (app bindings, no-op without `supports_vision`; `Ctrl+V` is priority to pre-empt TextArea's internal-clipboard paste, and exists for Mac terminals — see the paste-pills section)
   reads the clipboard via `ui/image_paste.py:read_clipboard_image` in a
   thread; `ChatInput` owns the images. `attach_image` inserts a literal

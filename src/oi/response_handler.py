@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Optional, Sequence
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 # pydantic_ai imports are function-local: its package __init__ costs ~600ms,
 # which would otherwise land on every startup before the first prompt paints.
@@ -14,6 +15,23 @@ if TYPE_CHECKING:
 
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.renderers import ResponseRenderer, StyledRenderer
+
+
+@dataclass
+class _NativeCall:
+    """A server-side tool call being assembled from stream events.
+
+    Args stream separately from the call part on most providers: Anthropic
+    sends JSON string fragments, OpenAI Responses one complete dict at
+    `output_item.done`. The buffer accumulates string fragments until they
+    parse as a whole.
+    """
+
+    call_id: str
+    tool_name: str
+    args_buffer: str = ""
+    announced: bool = False
+    announced_args: Optional[dict[str, Any]] = field(default=None)
 
 
 class ResponseHandler:
@@ -31,6 +49,7 @@ class ResponseHandler:
         self.renderer: ResponseRenderer = (
             renderer if renderer is not None else StyledRenderer(capabilities, options)
         )
+        self._native_calls: dict[int, _NativeCall] = {}
 
     def start_response(self) -> None:
         """Initialize the response rendering."""
@@ -46,11 +65,11 @@ class ResponseHandler:
         )
 
         if isinstance(event, PartStartEvent):
-            self._handle_part(event.part)
+            self._handle_part(event.part, event.index)
         elif isinstance(event, PartDeltaEvent):
-            self._handle_delta(event.delta)
+            self._handle_delta(event.delta, event.index)
         elif isinstance(event, PartEndEvent):
-            self._handle_part_end(event.part)
+            self._handle_part_end(event.part, event.index)
         elif isinstance(event, FinalResultEvent):
             # No-op for now
             return
@@ -76,7 +95,7 @@ class ResponseHandler:
         """Return whether any streamed output has already been emitted."""
         return self.renderer.has_visible_output()
 
-    def _handle_part(self, part: ModelResponsePart) -> None:
+    def _handle_part(self, part: ModelResponsePart, index: int) -> None:
         from pydantic_ai.messages import (
             FilePart,
             NativeToolCallPart,
@@ -91,8 +110,14 @@ class ResponseHandler:
             self.renderer.render_text(part.content)
         elif isinstance(part, ThinkingPart):
             self.renderer.render_thinking(part.content)
-        elif isinstance(part, NativeToolCallPart | NativeToolReturnPart):
-            return  # Suppress native tool chatter (web_search, etc.)
+        elif isinstance(part, NativeToolCallPart):
+            call = _NativeCall(call_id=part.tool_call_id, tool_name=part.tool_name)
+            self._native_calls[index] = call
+            self._announce_native_call(call, _coerce_args(part.args))
+        elif isinstance(part, NativeToolReturnPart):
+            self.renderer.render_native_tool_return(
+                part.tool_call_id, part.tool_name, part.content
+            )
         elif isinstance(part, ToolCallPart):
             if self._should_suppress_tool(part.tool_name):
                 return
@@ -108,7 +133,7 @@ class ResponseHandler:
         elif isinstance(part, FilePart):
             self.renderer.render_tool_call("[file attachment]")
 
-    def _handle_delta(self, delta) -> None:
+    def _handle_delta(self, delta, index: int) -> None:
         from pydantic_ai.messages import (
             TextPartDelta,
             ThinkingPartDelta,
@@ -120,17 +145,50 @@ class ResponseHandler:
         elif isinstance(delta, ThinkingPartDelta) and delta.content_delta:
             self.renderer.render_thinking(delta.content_delta)
         elif isinstance(delta, ToolCallPartDelta):
+            call = self._native_calls.get(index)
+            if call is not None:
+                self._apply_native_args_delta(call, delta.args_delta)
+                return
             if self._should_suppress_tool(delta.tool_name_delta):
                 return
             description = self._format_tool(delta.tool_name_delta, delta.args_delta)
             if description:
                 self.renderer.render_tool_call(description)
 
-    def _handle_part_end(self, part: ModelResponsePart) -> None:
-        from pydantic_ai.messages import ThinkingPart
+    def _handle_part_end(self, part: ModelResponsePart, index: int) -> None:
+        from pydantic_ai.messages import NativeToolCallPart, ThinkingPart
 
         if isinstance(part, ThinkingPart):
             self.renderer.close_thinking_section(final=True)
+        elif isinstance(part, NativeToolCallPart):
+            # The end event carries the authoritative final args; announce them
+            # if the delta accumulation never produced a parseable dict.
+            call = self._native_calls.pop(index, None)
+            if call is not None:
+                args = _coerce_args(part.args)
+                if args is not None:
+                    self._announce_native_call(call, args)
+
+    def _announce_native_call(self, call: _NativeCall, args: Optional[dict]) -> None:
+        if call.announced and (args is None or args == call.announced_args):
+            return
+        call.announced = True
+        call.announced_args = args
+        self.renderer.render_native_tool_call(call.call_id, call.tool_name, args)
+
+    def _apply_native_args_delta(self, call: _NativeCall, args_delta) -> None:
+        if isinstance(args_delta, dict):
+            # OpenAI Responses delivers the complete args as one dict delta.
+            self._announce_native_call(call, args_delta)
+        elif isinstance(args_delta, str):
+            # Anthropic streams JSON string fragments; announce once whole.
+            call.args_buffer += args_delta
+            try:
+                args = json.loads(call.args_buffer)
+            except ValueError:
+                return
+            if isinstance(args, dict):
+                self._announce_native_call(call, args)
 
     def _format_tool(self, name: Optional[str], args) -> Optional[str]:
         """Create a basic human-readable tool description."""
@@ -167,3 +225,16 @@ class ResponseHandler:
             for part in parts
             if isinstance(part, TextPart) and part.content
         )
+
+
+def _coerce_args(args: str | dict[str, Any] | None) -> Optional[dict[str, Any]]:
+    """Normalize part args (dict, JSON string, or None) to a dict or None."""
+    if isinstance(args, dict):
+        return args
+    if isinstance(args, str):
+        try:
+            parsed = json.loads(args)
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
