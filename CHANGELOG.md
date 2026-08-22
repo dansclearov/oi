@@ -11,6 +11,10 @@ config/`models.yaml` format, alias names).
 
 ### Changed
 
+- Startup is ~4x faster (~600ms less before the UI appears, both frontends):
+  pydantic-ai — the bulk of oi's import cost — is now loaded in the
+  background after the UI is up instead of before anything paints.
+
 - Bookmarked chats are marked with `*` in the chat selector (`oi -r`) instead
   of a star: `★` is an East-Asian-ambiguous-width character, so terminals
   disagree on whether it takes one cell or two.

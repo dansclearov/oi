@@ -327,7 +327,7 @@ class TestResolveModel:
             built.append(target)
             return Mock(spec=Model)
 
-        monkeypatch.setattr("oi.core.client.infer_model", slow_infer_model)
+        monkeypatch.setattr("pydantic_ai.models.infer_model", slow_infer_model)
 
         async def resolve_while_ticking():
             ticks = 0

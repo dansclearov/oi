@@ -3,25 +3,20 @@
 from __future__ import annotations
 
 import json
-from typing import Callable, Optional, Sequence
+from typing import TYPE_CHECKING, Callable, Optional, Sequence
 
-from pydantic_ai.messages import (
-    BinaryContent,
-    ImageUrl,
-    ModelMessage,
-    ModelMessagesTypeAdapter,
-    ModelRequest,
-    ModelResponse,
-    SystemPromptPart,
-    TextPart,
-    UserPromptPart,
-)
+# pydantic_ai imports are function-local: its package __init__ costs ~600ms,
+# which would otherwise land on every startup before the first prompt paints.
+if TYPE_CHECKING:
+    from pydantic_ai.messages import ModelMessage, ModelResponse
 
 
 def serialize_model_messages(messages: Sequence[ModelMessage]) -> list[dict]:
     """Serialize model messages to a JSON-friendly structure."""
     if not messages:
         return []
+    from pydantic_ai.messages import ModelMessagesTypeAdapter
+
     json_bytes = ModelMessagesTypeAdapter.dump_json(list(messages))
     return json.loads(json_bytes)
 
@@ -30,6 +25,8 @@ def deserialize_model_messages(data: Sequence[dict]) -> list[ModelMessage]:
     """Deserialize JSON data into model messages."""
     if not data:
         return []
+    from pydantic_ai.messages import ModelMessagesTypeAdapter
+
     return ModelMessagesTypeAdapter.validate_python(list(data))
 
 
@@ -37,6 +34,14 @@ def convert_legacy_messages(
     legacy_messages: Sequence[dict[str, str]],
 ) -> list[ModelMessage]:
     """Convert legacy OpenAI-style dict messages into ModelMessage objects."""
+    from pydantic_ai.messages import (
+        ModelRequest,
+        ModelResponse,
+        SystemPromptPart,
+        TextPart,
+        UserPromptPart,
+    )
+
     result: list[ModelMessage] = []
     pending_system_prompt: Optional[str] = None
 
@@ -77,6 +82,8 @@ def render_user_prompt_content(
     if isinstance(content, str):
         return content
 
+    from pydantic_ai.messages import BinaryContent, ImageUrl
+
     if not isinstance(content, (list, tuple)):
         return str(content)
 
@@ -106,6 +113,15 @@ def flatten_history(
     leave it None to keep output plain.
     """
     history: list[tuple[str, str]] = []
+    if not messages:
+        return history
+
+    from pydantic_ai.messages import (
+        ModelRequest,
+        ModelResponse,
+        TextPart,
+        UserPromptPart,
+    )
 
     for message in messages:
         if isinstance(message, ModelRequest):
@@ -134,6 +150,10 @@ def flatten_history(
 def latest_system_prompt(messages: Sequence[ModelMessage]) -> Optional[str]:
     """Return the last seen system prompt in the conversation, if any."""
     last_prompt: Optional[str] = None
+    if not messages:
+        return last_prompt
+
+    from pydantic_ai.messages import ModelRequest, SystemPromptPart
 
     for message in messages:
         if isinstance(message, ModelRequest):
@@ -147,6 +167,16 @@ def latest_system_prompt(messages: Sequence[ModelMessage]) -> Optional[str]:
 def count_non_system_messages(messages: Sequence[ModelMessage]) -> int:
     """Count messages that should appear in the chat transcript (excludes system)."""
     count = 0
+    if not messages:
+        return count
+
+    from pydantic_ai.messages import (
+        ModelRequest,
+        ModelResponse,
+        TextPart,
+        UserPromptPart,
+    )
+
     for message in messages:
         if isinstance(message, ModelRequest):
             if any(isinstance(part, UserPromptPart) for part in message.parts):
@@ -161,6 +191,8 @@ def count_non_system_messages(messages: Sequence[ModelMessage]) -> int:
 
 def build_prompt(system_prompt: Optional[str], user_prompt: str) -> list[ModelMessage]:
     """Build a single-turn prompt with optional system instructions."""
+    from pydantic_ai.messages import ModelRequest, SystemPromptPart, UserPromptPart
+
     parts = []
     if system_prompt:
         parts.append(SystemPromptPart(system_prompt))
@@ -170,6 +202,8 @@ def build_prompt(system_prompt: Optional[str], user_prompt: str) -> list[ModelMe
 
 def response_text(response: ModelResponse) -> str:
     """Extract concatenated text parts from a ModelResponse."""
+    from pydantic_ai.messages import TextPart
+
     return "".join(
         part.content for part in response.parts if isinstance(part, TextPart)
     )

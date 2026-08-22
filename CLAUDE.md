@@ -439,6 +439,28 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   you need to eyeball layout. `run_test` overrides `_disable_tooltips`, so
   tooltip behavior can only be asserted on an app that isn't running.
 
+**Startup Latency (`warmup.py`):**
+- pydantic_ai's package `__init__` costs ~600ms (it eagerly pulls in
+  mcp/fastmcp/logfire), so nothing on the startup path imports it at module
+  level: the modules that use it hold `TYPE_CHECKING` imports for annotations
+  and function-local imports at the runtime call sites.
+  `tests/unit/test_startup.py` guards this in a subprocess.
+- The interactive frontends pre-import it in the background once their UI is
+  up — TUI via `call_after_refresh(warmup.warm)` after the first paint,
+  scrollback at the top of `run_chat_loop` — so the first turn normally finds
+  it loaded. Headless/stats/docs/auth never warm; they import inline.
+- A plain pydantic_ai import racing the warm-up thread **crashes**: Python
+  resolves cross-thread import cycles by exposing partially initialized
+  modules, and pydantic_ai has internal cycles. Every path that can be the
+  process's first pydantic_ai touch after `warm()` therefore gates on
+  `warmup.ensure()` (a lock shared with the warm thread): turn start in both
+  frontends, `/btw`, and image paste. Everything else runs downstream of
+  those gates or before `warm()` is called (chat load, selector search).
+  Don't add a module-level pydantic_ai import or a new ungated first touch.
+- `message_utils` helpers early-return before their import when the history
+  is empty, so a new chat's TUI mount (which replays an empty history on the
+  main thread, pre-gate) never triggers it.
+
 **Model Construction (`client.py:_resolve_model`):**
 - pydantic-ai's `infer_model()` imports the provider SDK and builds an HTTP
   client — ~300ms on the first turn of a run, tens of ms after — and it runs

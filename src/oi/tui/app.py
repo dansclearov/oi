@@ -8,22 +8,24 @@ instead of the banner, and a bordered input pinned at the bottom with a
 contextual hint line beneath it.
 """
 
+from __future__ import annotations
+
 import asyncio
 import re
 from dataclasses import replace
 from time import monotonic
 from typing import TYPE_CHECKING, Optional, Sequence, Union, cast
 
+# pydantic_ai imports are function-local: its package __init__ costs ~600ms,
+# which would otherwise delay the first paint. `main()` pre-imports it on a
+# background thread while the app mounts.
 if TYPE_CHECKING:
     from textual.document._document import Document
 
-from pydantic_ai.messages import (
-    BinaryContent,
-    ModelRequest,
-    SystemPromptPart,
-    UserContent,
-    UserPromptPart,
-)
+    from pydantic_ai.messages import BinaryContent, UserContent
+
+    UserContentInput = Union[str, Sequence[UserContent]]
+
 from rich.style import Style
 from rich.text import Text
 from textual import on
@@ -71,6 +73,7 @@ from oi.tui.renderer import (
     ToolLine,
     TuiRenderer,
 )
+from oi import warmup
 from oi.ui.image_paste import read_clipboard_image
 from oi.ui.labels import (
     AI_LABEL,
@@ -99,8 +102,6 @@ VIM_MODE_HINTS = {
 
 # Marker for ephemeral `/btw` side answers: hollow = not saved to the chat.
 BTW_MARKER = "○ "
-
-UserContentInput = Union[str, Sequence[UserContent]]
 
 LABEL_CSS = {
     USER_LABEL: "user-label",
@@ -385,6 +386,9 @@ class ChatInput(TextArea):
         self._images = {}
         if not images:
             return text
+        # Reached only after a paste, which already forced the pydantic_ai
+        # import — safe on the main thread.
+        from pydantic_ai.messages import BinaryContent
 
         parts: list[UserContent] = []
         pos = 0
@@ -804,6 +808,9 @@ class OiApp(App):
         # Show the terminal's own cursor (Textual keeps it positioned at the
         # TextArea cursor for IME); steady bar to start — insert mode.
         self._write_terminal("\x1b[?25h\x1b[6 q")
+        # After the first paint: pre-import pydantic_ai so the first turn
+        # doesn't stall on it. The turn and paste paths gate on ensure().
+        self.call_after_refresh(warmup.warm)
 
     def _write_terminal(self, sequence: str) -> None:
         if self._driver is not None and not self.is_headless:
@@ -1062,6 +1069,7 @@ class OiApp(App):
     # --- streaming turn -------------------------------------------------
 
     async def _run_turn(self, content: UserContentInput) -> None:
+        await asyncio.to_thread(warmup.ensure)
         chat = self._chat
         ctx = self._ctx
         chat.append_user_message(content)
@@ -1111,6 +1119,9 @@ class OiApp(App):
         Nothing is appended or saved; the answer renders under the hollow
         `○` marker.
         """
+        await asyncio.to_thread(warmup.ensure)
+        from pydantic_ai.messages import ModelRequest, SystemPromptPart, UserPromptPart
+
         chat = self._chat
         ctx = self._ctx
         side_messages = list(chat.messages)
@@ -1151,6 +1162,9 @@ class OiApp(App):
     async def action_paste_image(self) -> None:
         if self._capabilities is None or not self._capabilities.supports_vision:
             return
+        await asyncio.to_thread(warmup.ensure)
+        from pydantic_ai.messages import BinaryContent
+
         image = await asyncio.to_thread(read_clipboard_image)
         if image is None:
             await self._mount_notice(INFO_LABEL, "No image found in the clipboard.")

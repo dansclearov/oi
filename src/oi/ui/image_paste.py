@@ -10,6 +10,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from prompt_toolkit.formatted_text.base import StyleAndTextTuples
 from prompt_toolkit.formatted_text.utils import fragment_list_to_text
@@ -19,9 +20,13 @@ from prompt_toolkit.layout.processors import (
     TransformationInput,
 )
 from prompt_toolkit.layout.utils import explode_text_fragments
-from pydantic_ai.messages import BinaryContent
 
 from oi.ui.labels import PILL_PT_STYLE
+
+# pydantic_ai imports are function-local: its package __init__ costs ~600ms,
+# which would otherwise land on every startup before the first prompt paints.
+if TYPE_CHECKING:
+    from pydantic_ai.messages import BinaryContent
 
 SENTINEL_BASE = 0xE000
 SENTINEL_MAX = 0xF8FF
@@ -61,6 +66,8 @@ class PasteStore:
         return chr(codepoint)
 
     def add_image(self, data: bytes, media_type: str) -> str:
+        from pydantic_ai.messages import BinaryContent
+
         sentinel = self._allocate_sentinel()
         self._entries[sentinel] = _ImageEntry(
             BinaryContent(data=data, media_type=media_type)

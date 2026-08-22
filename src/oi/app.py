@@ -1,10 +1,12 @@
 """Main application orchestration."""
 
+from __future__ import annotations
+
 import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 
 from dotenv import load_dotenv
 from platformdirs import user_config_dir, user_data_dir
@@ -17,13 +19,12 @@ from oi.constants import (
     SMART_TITLE_API_KEY_ENV,
     SMART_TITLE_MODEL,
 )
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    SystemPromptPart,
-    UserPromptPart,
-)
+
+# pydantic_ai imports are function-local: its package __init__ costs ~600ms,
+# which would otherwise land on every startup before the first prompt paints.
+# The interactive frontends pre-import it via `oi.warmup` instead.
+if TYPE_CHECKING:
+    from pydantic_ai.messages import ModelMessage, ModelResponse
 
 from oi.core.chat_manager import ChatManager
 from oi.core.client import LLMClient, subscription_billing_active
@@ -45,6 +46,7 @@ from oi.local_commands import (
     parse_local_command,
 )
 from oi.prompts import read_system_message_from_file
+from oi import warmup
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.registry import ModelRegistry
 from oi.text import truncate_to_cells
@@ -346,6 +348,8 @@ def _run_side_question(
     appended to the chat or saved. The answer renders under an `AI (btw): `
     label. Search/thinking follow the session's options.
     """
+    from pydantic_ai.messages import ModelRequest, SystemPromptPart, UserPromptPart
+
     side_messages = list(current_chat.messages)
     parts: list = []
     # On a brand-new chat the system prompt is still pending (not yet in
@@ -436,6 +440,7 @@ def _warn_if_response_hit_output_limit(model_response: ModelResponse) -> None:
 
 def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
     """Run the main chat interaction loop."""
+    warmup.warm()
     source_tag = _billing_tag(ctx.llm_client.registry, ctx.active_model)
     _print_chat_session_context(current_chat, ctx.prompt_str, source_tag)
     capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
@@ -449,6 +454,9 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
         pending_user_message = False
         try:
             user_input = ctx.input_handler.get_user_input(active_capabilities)
+            # Everything past the prompt may touch pydantic_ai; don't race
+            # the warm-up thread.
+            warmup.ensure()
 
             if isinstance(user_input, str):
                 normalized_input = user_input.strip()

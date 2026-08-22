@@ -1,17 +1,19 @@
+from __future__ import annotations
+
 import asyncio
 import os
 import signal
 import threading
 import time
 from dataclasses import dataclass, replace
-from typing import Callable, Optional, Sequence
+from typing import TYPE_CHECKING, Callable, Optional, Sequence
 
-from pydantic_ai.direct import model_request_stream
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.native_tools import WebFetchTool, WebSearchTool
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models import Model, ModelRequestParameters, infer_model
-from pydantic_ai.settings import ModelSettings
+# pydantic_ai imports are function-local: its package __init__ costs ~600ms,
+# which would otherwise land on every startup before the first prompt paints.
+if TYPE_CHECKING:
+    from pydantic_ai.messages import ModelMessage, ModelResponse
+    from pydantic_ai.models import Model, ModelRequestParameters
+    from pydantic_ai.settings import ModelSettings
 
 from oi.core import codex_auth
 from oi.llm_types import ChatOptions, ModelCapabilities
@@ -183,6 +185,8 @@ class LLMClient:
         renderer_factory: Optional[RendererFactory] = None,
     ) -> _PreparedRequest:
         """Resolve model, settings, and rendering for a single turn."""
+        from pydantic_ai.settings import ModelSettings
+
         if options is None:
             options = ChatOptions()
 
@@ -347,6 +351,8 @@ class LLMClient:
         turn on a fresh loop, so it simply rebuilds. A long-lived loop (the
         TUI) reuses the model, which keeps its connection warm between turns.
         """
+        from pydantic_ai.models import Model, infer_model
+
         if isinstance(target, Model):
             return target
         loop = asyncio.get_running_loop()
@@ -359,6 +365,8 @@ class LLMClient:
 
     async def _stream_with_fallback(self, prepared: _PreparedRequest) -> ModelResponse:
         """Stream on the subscription, falling back to the API key on exhaustion."""
+        from pydantic_ai.exceptions import ModelHTTPError
+
         handler = prepared.handler
         try:
             return await self._stream_model_response_with_retry(
@@ -437,6 +445,8 @@ class LLMClient:
         handler: ResponseHandler,
     ) -> ModelResponse:
         """Stream model events via the async API and return the final response."""
+        from pydantic_ai.direct import model_request_stream
+
         async with model_request_stream(
             model=await self._resolve_model(model),
             messages=model_messages,
@@ -481,6 +491,9 @@ class LLMClient:
         options: ChatOptions,
     ) -> ModelRequestParameters:
         """Create provider-specific request parameters (native tools, etc.)."""
+        from pydantic_ai.models import ModelRequestParameters
+        from pydantic_ai.native_tools import WebFetchTool, WebSearchTool
+
         native_tools = []
 
         if (

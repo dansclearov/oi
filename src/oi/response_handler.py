@@ -1,27 +1,16 @@
 from __future__ import annotations
 
 import json
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 
-from pydantic_ai.messages import (
-    FilePart,
-    FinalResultEvent,
-    ModelResponse,
-    ModelResponsePart,
-    ModelResponseStreamEvent,
-    NativeToolCallPart,
-    NativeToolReturnPart,
-    PartDeltaEvent,
-    PartEndEvent,
-    PartStartEvent,
-    TextPart,
-    TextPartDelta,
-    ThinkingPart,
-    ThinkingPartDelta,
-    ToolCallPart,
-    ToolCallPartDelta,
-    ToolReturnPart,
-)
+# pydantic_ai imports are function-local: its package __init__ costs ~600ms,
+# which would otherwise land on every startup before the first prompt paints.
+if TYPE_CHECKING:
+    from pydantic_ai.messages import (
+        ModelResponse,
+        ModelResponsePart,
+        ModelResponseStreamEvent,
+    )
 
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.renderers import ResponseRenderer, StyledRenderer
@@ -49,6 +38,13 @@ class ResponseHandler:
 
     def handle_event(self, event: ModelResponseStreamEvent) -> None:
         """Handle a streaming event emitted by pydantic-ai."""
+        from pydantic_ai.messages import (
+            FinalResultEvent,
+            PartDeltaEvent,
+            PartEndEvent,
+            PartStartEvent,
+        )
+
         if isinstance(event, PartStartEvent):
             self._handle_part(event.part)
         elif isinstance(event, PartDeltaEvent):
@@ -81,6 +77,16 @@ class ResponseHandler:
         return self.renderer.has_visible_output()
 
     def _handle_part(self, part: ModelResponsePart) -> None:
+        from pydantic_ai.messages import (
+            FilePart,
+            NativeToolCallPart,
+            NativeToolReturnPart,
+            TextPart,
+            ThinkingPart,
+            ToolCallPart,
+            ToolReturnPart,
+        )
+
         if isinstance(part, TextPart):
             self.renderer.render_text(part.content)
         elif isinstance(part, ThinkingPart):
@@ -103,6 +109,12 @@ class ResponseHandler:
             self.renderer.render_tool_call("[file attachment]")
 
     def _handle_delta(self, delta) -> None:
+        from pydantic_ai.messages import (
+            TextPartDelta,
+            ThinkingPartDelta,
+            ToolCallPartDelta,
+        )
+
         if isinstance(delta, TextPartDelta):
             self.renderer.render_text(delta.content_delta)
         elif isinstance(delta, ThinkingPartDelta) and delta.content_delta:
@@ -115,6 +127,8 @@ class ResponseHandler:
                 self.renderer.render_tool_call(description)
 
     def _handle_part_end(self, part: ModelResponsePart) -> None:
+        from pydantic_ai.messages import ThinkingPart
+
         if isinstance(part, ThinkingPart):
             self.renderer.close_thinking_section(final=True)
 
@@ -146,6 +160,8 @@ class ResponseHandler:
 
     def _extract_text(self, parts: Sequence[ModelResponsePart]) -> str:
         """Fallback text extraction when no stream deltas were emitted."""
+        from pydantic_ai.messages import TextPart
+
         return "".join(
             part.content
             for part in parts

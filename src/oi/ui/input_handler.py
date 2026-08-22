@@ -1,9 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from prompt_toolkit.cursor_shapes import ModalCursorShapeConfig
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.shortcuts import CompleteStyle, PromptSession
-from pydantic_ai.messages import UserContent
 
+if TYPE_CHECKING:
+    from pydantic_ai.messages import UserContent
+
+from oi import warmup
 from oi.core.message_utils import render_user_prompt_content
 from oi.llm_types import ModelCapabilities
 from oi.local_commands import SlashCommandCompleter
@@ -74,6 +81,8 @@ class InputHandler:
 
             @bindings.add("escape", "v")
             def _(event):
+                # `add_image` touches pydantic_ai; don't race the warm-up thread.
+                warmup.ensure()
                 image = read_clipboard_image()
                 if image is None:
                     return

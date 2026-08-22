@@ -1,22 +1,19 @@
 """Chat session management."""
 
+from __future__ import annotations
+
 import copy
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from collections.abc import Sequence
 
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    SystemPromptPart,
-    TextPart,
-    UserContent,
-    UserPromptPart,
-)
+# pydantic_ai imports are function-local: its package __init__ costs ~600ms,
+# which would otherwise land on every startup before the first prompt paints.
+if TYPE_CHECKING:
+    from pydantic_ai.messages import ModelMessage, ModelResponse, UserContent
 
 from oi.core.message_utils import (
     count_non_system_messages,
@@ -128,6 +125,8 @@ class Chat:
 
     def append_user_message(self, content: str | Sequence[UserContent]) -> None:
         """Append a user message, injecting system prompt if pending."""
+        from pydantic_ai.messages import ModelRequest, SystemPromptPart, UserPromptPart
+
         parts = []
         if self.pending_system_prompt:
             parts.append(SystemPromptPart(self.pending_system_prompt))
@@ -139,6 +138,8 @@ class Chat:
         self, response: ModelResponse | str, *, allow_empty: bool = False
     ) -> None:
         """Append an assistant response."""
+        from pydantic_ai.messages import ModelResponse, TextPart
+
         if isinstance(response, ModelResponse):
             self.messages.append(response)
             return
@@ -157,6 +158,8 @@ class Chat:
         If the request carried the system prompt (first turn of a new chat),
         restore it as pending so the next message re-injects it.
         """
+        from pydantic_ai.messages import ModelRequest, SystemPromptPart
+
         if not self.messages or not isinstance(self.messages[-1], ModelRequest):
             return
 
