@@ -3,12 +3,44 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Callable, Optional, Sequence
+import re
+from typing import TYPE_CHECKING, Callable, Iterable, Optional, Sequence
 
 # pydantic_ai imports are function-local: its package __init__ costs ~600ms,
 # which would otherwise land on every startup before the first prompt paints.
 if TYPE_CHECKING:
     from pydantic_ai.messages import ModelMessage, ModelResponse
+
+
+# A completed ATX heading at the very end of a text block. `\Z` (not `$`) so a
+# block that ends in a newline never matches — nothing was dropped there.
+_TRAILING_HEADING = re.compile(r"(?:^|\n)[ \t]{0,3}#{1,6}(?:[ \t][^\n]*)?\Z")
+
+
+def text_part_separator(accumulated: str, following: str) -> str:
+    """Return the break to restore between two assistant text blocks.
+
+    Anthropic splits a cited answer into one text block per citation and strips
+    each block's trailing newlines, so a heading ending one block arrives glued
+    to the sentence opening the next: `## SpecsBoth models have ...`, rendered
+    as one long heading. A heading is line-terminated by definition, so a block
+    that follows one without starting on a new line lost that break.
+    """
+    if not accumulated or not following:
+        return ""
+    if accumulated.endswith("\n") or following.startswith("\n"):
+        return ""
+    return "\n\n" if _TRAILING_HEADING.search(accumulated) else ""
+
+
+def join_text_parts(contents: Iterable[str]) -> str:
+    """Concatenate a response's text blocks, restoring dropped line breaks."""
+    joined = ""
+    for content in contents:
+        if not content:
+            continue
+        joined += text_part_separator(joined, content) + content
+    return joined
 
 
 def serialize_model_messages(messages: Sequence[ModelMessage]) -> list[dict]:
@@ -136,10 +168,8 @@ def flatten_history(
                         )
                     )
         elif isinstance(message, ModelResponse):
-            text = "".join(
-                part.content
-                for part in message.parts
-                if isinstance(part, TextPart) and part.content
+            text = join_text_parts(
+                part.content for part in message.parts if isinstance(part, TextPart)
             )
             if text:
                 history.append(("assistant", text))
@@ -204,6 +234,6 @@ def response_text(response: ModelResponse) -> str:
     """Extract concatenated text parts from a ModelResponse."""
     from pydantic_ai.messages import TextPart
 
-    return "".join(
+    return join_text_parts(
         part.content for part in response.parts if isinstance(part, TextPart)
     )

@@ -518,6 +518,18 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   loop-agnostic. Subscription models are already `Model` instances and pass
   through untouched (they must stay per-turn — the access token can refresh).
 
+**Citation-Split Text Parts (`core/message_utils.py:text_part_separator`):**
+- Anthropic returns a search-backed answer as one `TextPart` per citation and
+  strips each block's trailing newlines, so a heading that ends a block arrives
+  glued to the sentence opening the next one (`## SpecsBoth models have ...`,
+  rendered as one long heading). A heading is line-terminated by definition, so
+  a following block that doesn't start on a new line lost that break — that is
+  the only boundary where the dropped whitespace can be recovered, and the only
+  one this restores. Applied at **part** boundaries only
+  (`ResponseHandler._handle_part`), never per delta: a delta can end inside a
+  heading (`## Sp`). `join_text_parts` is the same rule for replay
+  (`flatten_history`, `response_text`), since the stored parts keep the glue.
+
 **Streaming & Output:**
 - `StyledRenderer` is the scrollback renderer — styled thinking traces, NOT markdown rendering (markdown is TUI-only); `ResponseHandler` accepts an injected renderer (the TUI passes `TuiRenderer` via `chat_async`'s `renderer_factory`)
 - Shared label/color definitions live in `ui/labels.py` and are reused by plain prints, Rich output, and the prompt label

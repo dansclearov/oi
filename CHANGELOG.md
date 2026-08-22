@@ -39,6 +39,11 @@ config/`models.yaml` format, alias names).
 
 ### Fixed
 
+- Headings in a cited answer no longer swallow the paragraph that follows
+  them (`## SpecsBoth models have a 1M token context window...`, rendered as
+  one long heading). Anthropic splits a search-backed answer into one text
+  block per citation and strips each block's trailing newlines, so the break
+  after a heading was lost when the next citation started the paragraph.
 - Chat titles are capped in terminal cells rather than codepoints, so titles
   in CJK and other wide scripts are no longer stored at twice their budget —
   which is why they, and only they, showed up truncated in the chat selector

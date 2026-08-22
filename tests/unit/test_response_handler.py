@@ -6,6 +6,8 @@ from pydantic_ai.messages import (
     PartDeltaEvent,
     PartEndEvent,
     PartStartEvent,
+    TextPart,
+    TextPartDelta,
     ToolCallPartDelta,
 )
 
@@ -23,7 +25,7 @@ class RecordingRenderer(ResponseRenderer):
         pass
 
     def _render_text(self, text):
-        pass
+        self.events.append(("text", text))
 
     def _render_thinking(self, text):
         pass
@@ -160,3 +162,23 @@ def test_call_from_code_execution_is_flagged():
     )
     handler.handle_event(PartStartEvent(index=0, part=part))
     assert events == [("call", "c1", "web_search", None, True)]
+
+
+def test_citation_split_heading_gets_its_line_break_back():
+    """Anthropic strips a text block's trailing newlines, so a heading ending
+    one block would be glued to the sentence opening the next."""
+    handler, events = make_handler()
+
+    handler.handle_event(PartStartEvent(index=0, part=TextPart(content="## Sp")))
+    handler.handle_event(PartDeltaEvent(index=0, delta=TextPartDelta("ecs")))
+    handler.handle_event(
+        PartStartEvent(index=1, part=TextPart(content="Both models have 1M."))
+    )
+
+    assert [text for kind, text in events if kind == "text"] == [
+        "## Sp",
+        "ecs",
+        "\n\n",
+        "Both models have 1M.",
+    ]
+    assert handler.get_full_response() == "## Specs\n\nBoth models have 1M."

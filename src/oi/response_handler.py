@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         ModelResponseStreamEvent,
     )
 
+from oi.core.message_utils import join_text_parts, text_part_separator
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.renderers import ResponseRenderer, StyledRenderer
 
@@ -108,6 +109,11 @@ class ResponseHandler:
         )
 
         if isinstance(part, TextPart):
+            # Only at a part boundary: the separator keys off a trailing
+            # heading, and a mid-part delta can end inside one ("## Sp").
+            self.renderer.render_text(
+                text_part_separator(self.renderer.get_full_response(), part.content)
+            )
             self.renderer.render_text(part.content)
         elif isinstance(part, ThinkingPart):
             self.renderer.render_thinking(part.content)
@@ -229,10 +235,8 @@ class ResponseHandler:
         """Fallback text extraction when no stream deltas were emitted."""
         from pydantic_ai.messages import TextPart
 
-        return "".join(
-            part.content
-            for part in parts
-            if isinstance(part, TextPart) and part.content
+        return join_text_parts(
+            part.content for part in parts if isinstance(part, TextPart)
         )
 
 
