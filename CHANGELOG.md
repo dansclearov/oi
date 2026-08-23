@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-23
+
 ### Added
 
 - The TUI now shows server-side tool activity while a search-enabled model
@@ -325,7 +327,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/dansclearov/oi/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/dansclearov/oi/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dansclearov/oi/compare/v0.1.6...v0.2.0
 [0.1.6]: https://github.com/dansclearov/oi/compare/v0.1.5...v0.1.6
