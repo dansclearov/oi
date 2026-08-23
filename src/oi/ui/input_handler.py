@@ -33,9 +33,15 @@ class InputHandler:
         self.pill_processor = PillProcessor(self.paste_store)
 
     def get_user_input(
-        self, capabilities: ModelCapabilities | None = None
+        self,
+        capabilities: ModelCapabilities | None = None,
+        default: str = "",
     ) -> str | list[UserContent]:
-        """Get user input. Returns a plain str, or a list mixing text and images."""
+        """Get user input. Returns a plain str, or a list mixing text and images.
+
+        `default` prefills the buffer — used to hand an unsent message back
+        for review after an early interrupt.
+        """
         supports_vision = bool(capabilities and capabilities.supports_vision)
         bindings = KeyBindings()
         # Captured at Ctrl+C so we can echo the canceled buffer to scrollback
@@ -110,7 +116,7 @@ class InputHandler:
                 input_processors=[self.pill_processor],
                 erase_when_done=True,
             )
-            user_input = session.prompt()
+            user_input = session.prompt(default=default)
         except KeyboardInterrupt:
             canceled = canceled_text["value"]
             pills = (

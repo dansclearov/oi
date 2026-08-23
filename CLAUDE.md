@@ -287,8 +287,9 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   post Textual messages (`TextDelta`, `ThinkingDelta`, …); the app's async
   handlers mount widgets and feed the stream — the FIFO message queue
   preserves delta order. The worker posts `TurnFinished` after `chat_async`
-  returns (all paths), which stops the stream; on cancellation it discards the
-  pending user message first (Ctrl+C parity with the CLI loop). The worker is
+  returns (all paths), which stops the stream; on cancellation it applies the
+  interrupt semantics (see **Interrupted Turns**) first — keep the exchange or
+  unsend, mirroring the CLI loop. The worker is
   started from `call_after_refresh`, not inline: `chat_async`'s first step is
   synchronous and can block the loop for a while (see `_resolve_model`), which
   before the paint means the message looks stuck in the input. Re-entrancy is
@@ -346,7 +347,15 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   clear the selection, else arm exit for `CTRL_C_EXIT_WINDOW` and quit on a
   second press. Only a bare press arms, so repeated copies can't quit.
   `chat_async` maps `CancelledError` to mark-interrupted + finalize before
-  re-raising.
+  re-raising; `_run_turn`'s cancel handler then reads
+  `take_interrupt()` and either keeps the exchange or unsends (see
+  **Interrupted Turns**). The unsend leg rides on `TurnFinished(unsent=True)`
+  — `_on_turn_finished` removes the echoed row (`_pending_user_row`) and
+  hands the raw submission back via `ChatInput.restore_content`, which
+  re-registers the marker-numbered image snapshot so `[Image #N]` pills come
+  back live, not as dead text. The keep leg persists via
+  `TurnFinished(persist=True)` handled in `_on_turn_finished`, because the
+  cancelled worker can't safely await the save itself.
 - Post-turn save + smart titling run in `asyncio.to_thread` — `LLMClient.chat`
   (sync) is called there for titles, which is why its SIGINT handler installs
   only on the main thread.
@@ -529,6 +538,35 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   (`ResponseHandler._handle_part`), never per delta: a delta can end inside a
   heading (`## Sp`). `join_text_parts` is the same rule for replay
   (`flatten_history`, `response_text`), since the stored parts keep the glue.
+
+**Interrupted Turns (Ctrl+C / Esc mid-stream):**
+- The split is on *visible output at the moment of interrupt*
+  (`handler.has_visible_output()`): if the user saw anything — text, thinking,
+  a tool line — the exchange is **kept** CC-style (user message stays, partial
+  answer appended to history and saved) so a follow-up can steer the model; if
+  nothing was on screen yet, the message is **unsent** — dropped from history
+  (system prompt re-pended) and handed back to the input for review, the
+  "caught the typo but autopiloted Enter" case. "Visible" is deliberate:
+  hidden thinking (`--hide-thinking`) counts as nothing seen.
+- Mechanics: `_stream_model_response` snapshots `stream.get()` onto
+  `handler.partial_response` when cancelled; `_run_prepared` catches
+  `CancelledError` *and* `KeyboardInterrupt` (a signal landing while coroutine
+  bytecode runs raises straight through the task instead of cancelling it) and
+  stashes an `InterruptedTurn` on the client. Frontends consume it with
+  `take_interrupt()` (pops; `/btw` paths consume-and-discard so nothing goes
+  stale, and `_run_prepared` clears the stash at turn start).
+- `prune_interrupted_response` (`core/message_utils.py`) decides what's
+  storable: dangling `NativeToolCallPart`s (no matching return) are dropped —
+  a replayed unpaired server tool call reads as "the search ran and returned
+  nothing" — and if nothing with content survives it returns None (the user
+  message is then kept alone; providers accept consecutive user messages).
+  Partial text/thinking replay fine as-is: pydantic-ai skips empty blocks and
+  sends unsigned thinking as tagged text. The kept response is stamped
+  `state="interrupted"`.
+- The CLI unsend prefills the next prompt via `get_user_input(default=...)`;
+  image parts can't ride back into the line editor and are dropped
+  (`_restorable_text`). The TUI restore is lossless (images included).
+  Headless (`-p`) is unchanged: Ctrl+C exits 130, nothing saved.
 
 **Streaming & Output:**
 - `StyledRenderer` is the scrollback renderer — styled thinking traces, NOT markdown rendering (markdown is TUI-only); `ResponseHandler` accepts an injected renderer (the TUI passes `TuiRenderer` via `chat_async`'s `renderer_factory`)

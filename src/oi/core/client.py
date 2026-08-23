@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pydantic_ai.settings import ModelSettings
 
 from oi.core import codex_auth
+from oi.core.message_utils import prune_interrupted_response
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.registry import ModelRegistry
 from oi.renderers import ResponseRenderer
@@ -77,6 +78,20 @@ def _notify(options: ChatOptions, message: str) -> None:
 
 
 @dataclass
+class InterruptedTurn:
+    """What an interrupt left behind, for the frontend to act on.
+
+    `saw_output` is whether any output had reached the user when they pressed
+    Ctrl+C: if so, the turn is kept in history (with `partial_response` when
+    something storable arrived); if not, the message is unsent — dropped from
+    history and returned to the input for review.
+    """
+
+    partial_response: Optional[ModelResponse]
+    saw_output: bool
+
+
+@dataclass
 class _PreparedRequest:
     """Everything a single streaming turn needs, computed before it starts."""
 
@@ -93,7 +108,13 @@ class LLMClient:
     def __init__(self, registry: ModelRegistry):
         self.registry = registry
         self.interrupt_handler = None
+        self.last_interrupt: Optional[InterruptedTurn] = None
         self._model_cache: dict[str, tuple[asyncio.AbstractEventLoop, Model]] = {}
+
+    def take_interrupt(self) -> Optional[InterruptedTurn]:
+        """Pop what the last interrupted turn left behind (None if not interrupted)."""
+        interrupt, self.last_interrupt = self.last_interrupt, None
+        return interrupt
 
     def chat(
         self,
@@ -161,13 +182,22 @@ class LLMClient:
     async def _run_prepared(self, prepared: _PreparedRequest) -> ModelResponse:
         """Stream a prepared turn, finalizing the renderer on every outcome."""
         handler = prepared.handler
+        self.last_interrupt = None
         handler.start_response()
         try:
             response = await self._stream_with_fallback(prepared)
-        except asyncio.CancelledError:
-            # Sync path: Ctrl+C cancels the task (already marked interrupted by
-            # the signal handler). Async path: the caller cancelled the turn.
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            # Sync path: Ctrl+C either cancels the task or (when the signal
+            # lands while coroutine bytecode is running) raises straight through
+            # it. Async path: the caller cancelled the turn.
             handler.mark_interrupted()
+            partial = handler.partial_response
+            self.last_interrupt = InterruptedTurn(
+                partial_response=(
+                    prune_interrupted_response(partial) if partial is not None else None
+                ),
+                saw_output=handler.has_visible_output(),
+            )
             handler.finish_response()
             raise
         except Exception:
@@ -453,8 +483,14 @@ class LLMClient:
             model_settings=model_settings,
             model_request_parameters=request_parameters,
         ) as stream:
-            async for event in stream:
-                handler.handle_event(event)
+            try:
+                async for event in stream:
+                    handler.handle_event(event)
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                # Snapshot what arrived so an interrupted turn can keep its
+                # partial response in history (CC-style).
+                handler.partial_response = stream.get()
+                raise
             return stream.get()
 
     def _apply_search_settings(

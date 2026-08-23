@@ -160,11 +160,21 @@ class Notice(Message):
 
 
 class TurnFinished(Message):
-    """The turn worker is done streaming (successfully or not)."""
+    """The turn worker is done streaming (successfully or not).
 
-    def __init__(self, interrupted: bool) -> None:
+    `unsent` marks an interrupt that arrived before any output: the message is
+    pulled back into the input instead of showing an interrupted turn.
+    `persist` asks the app to save the chat (set when an interrupted turn kept
+    its exchange — the worker can't persist itself mid-cancellation).
+    """
+
+    def __init__(
+        self, interrupted: bool, *, unsent: bool = False, persist: bool = False
+    ) -> None:
         super().__init__()
         self.interrupted = interrupted
+        self.unsent = unsent
+        self.persist = persist
 
 
 def _row(
@@ -410,6 +420,17 @@ class ChatInput(TextArea):
         number = len(self._images) + 1
         self._images[number] = content
         self.insert(f"[Image #{number}] ")
+
+    def snapshot_images(self) -> dict[int, BinaryContent]:
+        """The pending images keyed by marker number, for a later restore."""
+        return dict(self._images)
+
+    def restore_content(self, text: str, images: dict[int, BinaryContent]) -> None:
+        """Put an unsent message back, its markers backed by images again."""
+        self._images = dict(images)
+        self.load_text(text)
+        self.move_cursor(self.document.end)
+        self.sync_height()
 
     def consume_content(self, text: str) -> UserContentInput:
         """Splice pending images in at their markers; reset for the next turn."""
@@ -832,6 +853,10 @@ class OiApp(App):
         self._vim_mode: Optional[VimMode] = None
         self._turn_active = False
         self._turn_worker: Optional[Worker] = None
+        # The live turn's echoed row and raw input (text + marker-keyed
+        # images), kept so an early interrupt can unsend the message.
+        self._pending_user_row: Optional[Horizontal] = None
+        self._pending_submission: Optional[tuple[str, dict[int, BinaryContent]]] = None
         self._capabilities: Optional[ModelCapabilities] = None
         self._header_message_count = current_chat.metadata.message_count
 
@@ -977,11 +1002,11 @@ class OiApp(App):
     async def _mount_notice(self, label: LabelStyle, text: str) -> None:
         await self._chat_log.mount(_notice_widget(label, text))
 
-    async def _mount_user_row(self, text: str) -> None:
+    async def _mount_user_row(self, text: str) -> Horizontal:
         """Echo a user message, keeping image markers styled as pills."""
-        await self._chat_log.mount(
-            _row(USER_LABEL, Static(_pill_text(text), classes="content"))
-        )
+        row = _row(USER_LABEL, Static(_pill_text(text), classes="content"))
+        await self._chat_log.mount(row)
+        return row
 
     # --- input ----------------------------------------------------------
 
@@ -998,7 +1023,10 @@ class OiApp(App):
 
         parsed_command = parse_local_command(text)
         # Take the images before clearing the input (clearing reconciles the
-        # marker registry down to nothing).
+        # marker registry down to nothing). The raw submission is stashed
+        # first so an early interrupt can hand the message back unchanged.
+        if parsed_command is None:
+            self._pending_submission = (text, input_widget.snapshot_images())
         content = None if parsed_command else input_widget.consume_content(text)
 
         # Hold the paint until the echoed row is actually mounted, so the
@@ -1009,7 +1037,9 @@ class OiApp(App):
             input_widget.clear()
             input_widget.vim_reset()
             input_widget.sync_height()
-            await self._mount_user_row(text)
+            row = await self._mount_user_row(text)
+        if parsed_command is None:
+            self._pending_user_row = row
 
         if parsed_command is not None:
             command_name, command_args = parsed_command
@@ -1141,8 +1171,20 @@ class OiApp(App):
                 ),
             )
         except asyncio.CancelledError:
-            chat.discard_pending_user_message()
-            self.post_message(TurnFinished(interrupted=True))
+            interrupt = ctx.llm_client.take_interrupt()
+            if interrupt is not None and interrupt.saw_output:
+                # Output was already on screen: keep the exchange (CC-style)
+                # so a follow-up can clarify against the partial answer.
+                if interrupt.partial_response is not None:
+                    chat.append_assistant_response(interrupt.partial_response)
+                self.post_message(
+                    TurnFinished(interrupted=True, persist=not ctx.ephemeral)
+                )
+            else:
+                # Nothing seen yet: unsend — the message goes back to the
+                # input for review instead of being lost.
+                chat.discard_pending_user_message()
+                self.post_message(TurnFinished(interrupted=True, unsent=True))
             raise
         except Exception as exc:
             chat.discard_pending_user_message()
@@ -1201,6 +1243,8 @@ class OiApp(App):
                 ),
             )
         except asyncio.CancelledError:
+            # A side answer keeps nothing, so drop the interrupt snapshot too.
+            ctx.llm_client.take_interrupt()
             self.post_message(TurnFinished(interrupted=True))
             raise
         except Exception as exc:
@@ -1360,16 +1404,33 @@ class OiApp(App):
         self._turn_active = False
         self._refresh_hint()
         self._response_active = False
-        if message.interrupted and self._active_view is None:
-            # Interrupted before any output arrived: still show it was cancelled.
+        if message.unsent:
+            # Interrupted before any output: no interrupted turn to show —
+            # the message comes back to the input for review instead.
+            await self._retract_user_message()
+        elif message.interrupted and self._active_view is None:
+            # A kept interrupt with no storable output: still show it was
+            # cancelled.
             await self._ensure_response_view()
         if self._active_view is not None:
             await self._active_view.finalize(interrupted=message.interrupted)
             self._active_view = None
+        self._pending_user_row = None
+        self._pending_submission = None
         self._response_label = None
         self._tool_block = None
         self._tool_lines = {}
         self._stashed_web_args = []
+        if message.persist:
+            await asyncio.to_thread(self._persist_turn)
+
+    async def _retract_user_message(self) -> None:
+        """Pull the unsent message out of the log and back into the input."""
+        if self._pending_user_row is not None:
+            await self._pending_user_row.remove()
+        if self._pending_submission is not None:
+            text, images = self._pending_submission
+            self.query_one(ChatInput).restore_content(text, images)
 
     # --- actions ---------------------------------------------------------
 

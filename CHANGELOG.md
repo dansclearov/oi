@@ -9,6 +9,15 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- Interrupting a streaming reply (`Ctrl+C` / `Esc`) now keeps the exchange in
+  the chat, Claude-Code-style: the partial answer stays in context, so a
+  follow-up can steer the model instead of starting the turn over. Interrupting
+  *before* any output arrives unsends instead — the message returns to the
+  input for review, for catching a mistake right after an autopiloted Enter.
+  Previously both cases discarded the whole exchange. Both frontends.
+
 ## [0.2.2] - 2026-08-23
 
 ### Added

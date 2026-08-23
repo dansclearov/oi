@@ -43,6 +43,48 @@ def join_text_parts(contents: Iterable[str]) -> str:
     return joined
 
 
+def prune_interrupted_response(response: ModelResponse) -> Optional[ModelResponse]:
+    """Reduce an interrupted response to the parts safe to keep in history.
+
+    A stream cut mid-turn can end on a native tool call whose result never
+    arrived; a dangling call replays badly (providers either reject it or read
+    it as a search that ran and returned nothing), so it is dropped. Partial
+    text and thinking replay fine — pydantic-ai skips empty blocks and wraps
+    unsigned thinking as tagged text. Returns None when nothing with content
+    survives, i.e. there is no assistant message worth storing.
+    """
+    from dataclasses import replace
+
+    from pydantic_ai.messages import (
+        NativeToolCallPart,
+        NativeToolReturnPart,
+        TextPart,
+        ThinkingPart,
+    )
+
+    answered = {
+        part.tool_call_id
+        for part in response.parts
+        if isinstance(part, NativeToolReturnPart)
+    }
+    parts = [
+        part
+        for part in response.parts
+        if not (
+            isinstance(part, NativeToolCallPart) and part.tool_call_id not in answered
+        )
+    ]
+
+    def has_substance(part) -> bool:
+        if isinstance(part, (TextPart, ThinkingPart)):
+            return bool(part.content.strip())
+        return True
+
+    if not any(has_substance(part) for part in parts):
+        return None
+    return replace(response, parts=parts, state="interrupted")
+
+
 def serialize_model_messages(messages: Sequence[ModelMessage]) -> list[dict]:
     """Serialize model messages to a JSON-friendly structure."""
     if not messages:

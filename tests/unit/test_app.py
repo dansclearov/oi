@@ -16,6 +16,7 @@ from oi.app import (
 )
 from oi.config.settings import Config, load_user_config
 from oi.constants import MAX_TITLE_LENGTH
+from oi.core.client import InterruptedTurn
 from oi.core.session import Chat, ChatMetadata
 from oi.exceptions import ChatNotFoundError
 from oi.llm_types import ChatOptions, ModelCapabilities
@@ -158,6 +159,65 @@ def test_run_chat_loop_discards_user_message_on_request_error():
 
     # Failed requests should not leave orphan user messages behind.
     assert current_chat.messages == []
+
+
+def _interrupt_chat(chat_id: str) -> Chat:
+    metadata = ChatMetadata(
+        id=chat_id,
+        title="Chat 2026-02-14 00:00",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        model="sonnet",
+        message_count=0,
+    )
+    return Chat(metadata=metadata)
+
+
+def test_run_chat_loop_interrupt_before_output_unsends_and_prefills():
+    current_chat = _interrupt_chat("test-chat-unsend")
+
+    llm_client = Mock()
+    llm_client.chat.side_effect = KeyboardInterrupt()
+    llm_client.take_interrupt.return_value = InterruptedTurn(
+        partial_response=None, saw_output=False
+    )
+    input_handler = Mock()
+    input_handler.get_user_input.side_effect = ["Hello wrold", KeyboardInterrupt()]
+    ctx = _make_ctx(llm_client=llm_client, input_handler=input_handler)
+
+    run_chat_loop(current_chat, ctx)
+
+    # The message is unsent and handed back for review at the next prompt.
+    assert current_chat.messages == []
+    prompts = input_handler.get_user_input.call_args_list
+    assert prompts[0].kwargs["default"] == ""
+    assert prompts[1].kwargs["default"] == "Hello wrold"
+
+
+def test_run_chat_loop_interrupt_mid_stream_keeps_the_exchange():
+    current_chat = _interrupt_chat("test-chat-keep-partial")
+    partial = ModelResponse(parts=[TextPart(content="partial answer")])
+
+    llm_client = Mock()
+    llm_client.chat.side_effect = KeyboardInterrupt()
+    llm_client.take_interrupt.return_value = InterruptedTurn(
+        partial_response=partial, saw_output=True
+    )
+    input_handler = Mock()
+    input_handler.get_user_input.side_effect = ["Hello", KeyboardInterrupt()]
+    chat_manager = Mock()
+    ctx = _make_ctx(
+        llm_client=llm_client, input_handler=input_handler, chat_manager=chat_manager
+    )
+
+    run_chat_loop(current_chat, ctx)
+
+    # CC-style: the question and the partial answer stay in history and save.
+    assert len(current_chat.messages) == 2
+    assert current_chat.messages[1] is partial
+    chat_manager.save_chat.assert_called_with(current_chat)
+    # The next prompt is not prefilled — nothing was unsent.
+    assert input_handler.get_user_input.call_args_list[1].kwargs["default"] == ""
 
 
 def test_run_chat_loop_warns_when_response_hits_output_limit(capsys):

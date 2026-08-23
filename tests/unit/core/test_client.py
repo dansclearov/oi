@@ -149,6 +149,92 @@ class TestLLMClient:
 
         assert attempts["count"] == 1
 
+    def test_run_prepared_captures_interrupted_turn_on_cancellation(self):
+        from pydantic_ai.messages import NativeToolCallPart
+
+        client = LLMClient(Mock())
+        handler = Mock()
+        handler.has_visible_output.return_value = True
+        handler.partial_response = ModelResponse(
+            parts=[
+                TextPart(content="partial answer"),
+                NativeToolCallPart(
+                    tool_name="web_search", args={"query": "q"}, tool_call_id="c1"
+                ),
+            ]
+        )
+        prepared = _PreparedRequest(
+            handler=handler,
+            options=ChatOptions(),
+            model_target="provider:model",
+            model_settings=None,
+            api_fallback=None,
+            request_parameters=Mock(),
+            messages=[],
+        )
+
+        async def cancelled_stream(prepared):
+            raise asyncio.CancelledError()
+
+        client._stream_with_fallback = cancelled_stream  # type: ignore[method-assign]
+
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(client._run_prepared(prepared))
+
+        interrupt = client.take_interrupt()
+        assert interrupt is not None
+        assert interrupt.saw_output is True
+        # The dangling native call is pruned; the text survives.
+        partial = interrupt.partial_response
+        assert partial is not None
+        assert [type(part).__name__ for part in partial.parts] == ["TextPart"]
+        assert partial.state == "interrupted"
+        handler.mark_interrupted.assert_called_once()
+        handler.finish_response.assert_called_once()
+        # take_interrupt pops: a second read reports no interrupt.
+        assert client.take_interrupt() is None
+
+    def test_stream_model_response_snapshots_partial_on_cancellation(self, monkeypatch):
+        import contextlib
+
+        import pydantic_ai.direct
+
+        client = LLMClient(Mock())
+        handler = Mock()
+        partial = ModelResponse(parts=[TextPart(content="so far")])
+
+        class FakeStream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise asyncio.CancelledError()
+
+            def get(self):
+                return partial
+
+        @contextlib.asynccontextmanager
+        async def fake_request_stream(**kwargs):
+            yield FakeStream()
+
+        monkeypatch.setattr(
+            pydantic_ai.direct, "model_request_stream", fake_request_stream
+        )
+
+        async def fake_resolve(target):
+            return Mock(spec=Model)
+
+        client._resolve_model = fake_resolve  # type: ignore[method-assign]
+
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(
+                client._stream_model_response(
+                    "provider:model", [], None, Mock(), handler
+                )
+            )
+
+        assert handler.partial_response is partial
+
     def test_resolve_capabilities_uses_config_when_available(self):
         registry = Mock()
         configured = ModelCapabilities(supports_search=True)

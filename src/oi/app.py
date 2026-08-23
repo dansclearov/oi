@@ -372,6 +372,8 @@ def _run_side_question(
     except KeyboardInterrupt:
         # Ctrl+C cancels just the side question; the main chat is untouched.
         # Catch it here so it doesn't reach the loop's idle-exit handler.
+        # Nothing is kept, so drop the interrupt snapshot too.
+        ctx.llm_client.take_interrupt()
         print("", flush=True)
     except Exception as exc:
         print(
@@ -438,6 +440,16 @@ def _warn_if_response_hit_output_limit(model_response: ModelResponse) -> None:
     )
 
 
+def _restorable_text(user_input) -> str:
+    """Text form of an unsent message, for prefilling the next prompt.
+
+    Image parts can't ride back into the line editor, so they are dropped.
+    """
+    if isinstance(user_input, str):
+        return user_input
+    return "".join(part for part in user_input if isinstance(part, str))
+
+
 def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
     """Run the main chat interaction loop."""
     warmup.warm()
@@ -450,10 +462,14 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
 
     # Main interaction loop
     is_idle = True
+    restore_text = ""
     while True:
         pending_user_message = False
         try:
-            user_input = ctx.input_handler.get_user_input(active_capabilities)
+            user_input = ctx.input_handler.get_user_input(
+                active_capabilities, default=restore_text
+            )
+            restore_text = ""
             # Everything past the prompt may touch pydantic_ai; don't race
             # the warm-up thread.
             warmup.ensure()
@@ -481,9 +497,26 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
                     capabilities_override=capabilities_override,
                 )
             except KeyboardInterrupt:
-                current_chat.discard_pending_user_message()
                 pending_user_message = False
-                raise
+                print("", flush=True)
+                interrupt = ctx.llm_client.take_interrupt()
+                if interrupt is not None and interrupt.saw_output:
+                    # Output was already on screen: keep the exchange (CC-style)
+                    # so a follow-up can clarify against the partial answer.
+                    if interrupt.partial_response is not None:
+                        current_chat.append_assistant_response(
+                            interrupt.partial_response
+                        )
+                    if not ctx.ephemeral:
+                        _update_title_from_first_user_message(current_chat)
+                        ctx.chat_manager.save_chat(current_chat)
+                else:
+                    # Nothing seen yet: unsend — the message comes back to the
+                    # prompt for review instead of being lost.
+                    current_chat.discard_pending_user_message()
+                    restore_text = _restorable_text(user_input)
+                is_idle = True
+                continue
             except Exception as exc:
                 current_chat.discard_pending_user_message()
                 pending_user_message = False

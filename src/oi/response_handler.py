@@ -52,6 +52,9 @@ class ResponseHandler:
             renderer if renderer is not None else StyledRenderer(capabilities, options)
         )
         self._native_calls: dict[int, _NativeCall] = {}
+        # Snapshot of an interrupted stream's accumulated response, set by the
+        # client when the turn is cancelled mid-stream.
+        self.partial_response: Optional[ModelResponse] = None
 
     def start_response(self) -> None:
         """Initialize the response rendering."""

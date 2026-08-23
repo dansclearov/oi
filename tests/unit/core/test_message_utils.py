@@ -6,6 +6,7 @@ from oi.core.message_utils import (
     flatten_history,
     join_text_parts,
     latest_system_prompt,
+    prune_interrupted_response,
     text_part_separator,
 )
 
@@ -62,3 +63,52 @@ def test_flatten_history_restores_the_break_on_replay():
     ((role, text),) = flatten_history([response])
     assert role == "assistant"
     assert "## Specs\n\nBoth models" in text
+
+
+def test_prune_interrupted_response_drops_dangling_native_call():
+    from pydantic_ai.messages import NativeToolCallPart, ThinkingPart
+
+    response = ModelResponse(
+        parts=[
+            ThinkingPart(content="let me search"),
+            TextPart(content="Checking that now."),
+            NativeToolCallPart(
+                tool_name="web_search", args={"query": "q"}, tool_call_id="c1"
+            ),
+        ]
+    )
+
+    pruned = prune_interrupted_response(response)
+
+    assert pruned is not None
+    assert [type(part).__name__ for part in pruned.parts] == [
+        "ThinkingPart",
+        "TextPart",
+    ]
+    assert pruned.state == "interrupted"
+
+
+def test_prune_interrupted_response_keeps_completed_native_call_pair():
+    from pydantic_ai.messages import NativeToolCallPart, NativeToolReturnPart
+
+    response = ModelResponse(
+        parts=[
+            NativeToolCallPart(
+                tool_name="web_search", args={"query": "q"}, tool_call_id="c1"
+            ),
+            NativeToolReturnPart(tool_name="web_search", content=[], tool_call_id="c1"),
+        ]
+    )
+
+    pruned = prune_interrupted_response(response)
+
+    assert pruned is not None
+    assert len(pruned.parts) == 2
+
+
+def test_prune_interrupted_response_returns_none_without_substance():
+    assert prune_interrupted_response(ModelResponse(parts=[])) is None
+    assert (
+        prune_interrupted_response(ModelResponse(parts=[TextPart(content="  \n")]))
+        is None
+    )

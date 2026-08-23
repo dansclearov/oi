@@ -16,6 +16,7 @@ from textual.widgets._markdown import MarkdownTable, MarkdownTableContent
 from oi.app import ChatLoopContext
 from oi.config.settings import Config, load_user_config
 from oi.core.chat_manager import ChatManager
+from oi.core.client import InterruptedTurn
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.tui.app import MAX_INPUT_HEIGHT, ChatInput, ChatLog, OiApp, ResponseView
 from oi.tui.slash_menu import SlashMenu
@@ -35,6 +36,11 @@ class FakeLLMClient:
         self.registry.get_provider_for_model.return_value = ("anthropic", "claude-x")
         self.registry.get_model_capabilities.return_value = capabilities
         self.calls = 0
+        self.last_interrupt = None
+
+    def take_interrupt(self):
+        interrupt, self.last_interrupt = self.last_interrupt, None
+        return interrupt
 
     def resolve_capabilities(self, model_name, capabilities_override=None):
         return self.capabilities
@@ -782,30 +788,50 @@ def test_image_markers_render_as_colored_pills(tmp_path):
     asyncio.run(scenario())
 
 
-def test_interrupt_discards_pending_message(tmp_path):
+def _hanging_chat_async(ctx, started, *, text=None, interrupt=None):
+    """A chat_async that streams `text` (if any) then hangs until cancelled,
+    stashing `interrupt` the way the real client's cancel path does."""
+
+    async def chat_async(
+        messages,
+        model_name_or_alias,
+        options=None,
+        *,
+        capabilities_override=None,
+        renderer_factory=None,
+    ):
+        assert renderer_factory is not None
+        renderer = renderer_factory(ctx.llm_client.capabilities, options)
+        renderer.start_response()
+        if text is not None:
+            renderer.render_text(text)
+        started.set()
+        try:
+            await asyncio.Event().wait()  # streams forever until cancelled
+        except asyncio.CancelledError:
+            ctx.llm_client.last_interrupt = interrupt
+            raise
+
+    return chat_async
+
+
+def test_interrupt_mid_stream_keeps_the_exchange(tmp_path):
     async def scenario():
         app, chat, ctx = _make_app(tmp_path)
         started = asyncio.Event()
-
-        async def hanging_chat_async(
-            messages,
-            model_name_or_alias,
-            options=None,
-            *,
-            capabilities_override=None,
-            renderer_factory=None,
-        ):
-            assert renderer_factory is not None
-            renderer = renderer_factory(ctx.llm_client.capabilities, options)
-            renderer.start_response()
-            renderer.render_text("partial answer")
-            started.set()
-            await asyncio.Event().wait()  # streams forever until cancelled
-
-        ctx.llm_client.chat_async = hanging_chat_async
+        partial = ModelResponse(
+            parts=[TextPart(content="partial answer")], state="interrupted"
+        )
+        ctx.llm_client.chat_async = _hanging_chat_async(
+            ctx,
+            started,
+            text="partial answer",
+            interrupt=InterruptedTurn(partial_response=partial, saw_output=True),
+        )
 
         async with app.run_test() as pilot:
-            app.query_one(ChatInput).insert("hello")
+            chat_input = app.query_one(ChatInput)
+            chat_input.insert("hello")
             await pilot.press("enter")
             await asyncio.wait_for(started.wait(), timeout=5)
             await pilot.pause()
@@ -816,6 +842,43 @@ def test_interrupt_discards_pending_message(tmp_path):
             await pilot.pause()
 
             assert list(app.query(".interrupted")), "expected [interrupted] marker"
+            assert chat_input.text == ""
+
+        # CC-style: the question and the partial answer stay in history.
+        assert len(chat.messages) == 2
+        assert chat.messages[1] is partial
+        saved = ctx.chat_manager.get_last_chat()
+        assert saved is not None and len(saved.messages) == 2
+
+    asyncio.run(scenario())
+
+
+def test_interrupt_before_output_unsends_the_message(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        started = asyncio.Event()
+        ctx.llm_client.chat_async = _hanging_chat_async(
+            ctx,
+            started,
+            interrupt=InterruptedTurn(partial_response=None, saw_output=False),
+        )
+
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            chat_input.insert("hello wrold")
+            await pilot.press("enter")
+            await asyncio.wait_for(started.wait(), timeout=5)
+            await pilot.pause()
+
+            await pilot.press("ctrl+c")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.pause()
+
+            # The message came back for review: echoed row gone, input refilled.
+            assert not list(app.query(".interrupted"))
+            assert not list(app.query("Static.content"))
+            assert chat_input.text == "hello wrold"
 
         assert chat.messages == []  # pending user message discarded
         # The unsent system prompt is restored for the next attempt.
