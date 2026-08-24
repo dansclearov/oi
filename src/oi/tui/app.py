@@ -394,7 +394,11 @@ class ChatInput(TextArea):
         if (
             self.vim is not None
             and self.vim.mode is not VimMode.INSERT
-            and (event.is_printable or event.key == "ctrl+r")
+            and (
+                event.is_printable
+                or event.key == "ctrl+r"
+                or event.key in self.vim.KEY_ALIASES
+            )
         ):
             event.stop()
             event.prevent_default()

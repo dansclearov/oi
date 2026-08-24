@@ -173,6 +173,11 @@ def test_normal_mode_blocks_typing():
     _drive("abc", ["escape", "0", "z", "q"], "abc", Mode.NORMAL)
 
 
+def test_normal_mode_backspace_moves_left_and_delete_is_x():
+    # Backspace is `h`, Delete is `x` — neither may fall through to TextArea.
+    _drive("abcd", ["escape", "backspace", "backspace", "delete"], "acd", Mode.NORMAL)
+
+
 class TestImageMarkerAtoms:
     """Image markers behave as one character under vim motions/edits."""
 

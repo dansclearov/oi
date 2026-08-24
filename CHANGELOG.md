@@ -18,6 +18,11 @@ config/`models.yaml` format, alias names).
   input for review, for catching a mistake right after an autopiloted Enter.
   Previously both cases discarded the whole exchange. Both frontends.
 
+### Fixed
+
+- TUI vim mode: `Backspace` and `Delete` in normal/visual mode no longer fall
+  through to the editor and delete text; they act as `h` and `x`.
+
 ## [0.2.2] - 2026-08-23
 
 ### Added

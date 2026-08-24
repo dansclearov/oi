@@ -356,15 +356,21 @@ class VimHandler:
 
     # ----------------------------------------------------------------- keys
 
+    # Non-printable keys with a vim meaning outside insert mode.
+    KEY_ALIASES = {"backspace": "h", "delete": "x"}
+
     def handle_key(self, event) -> None:
         """Handle one key in normal/visual mode (caller filters INSERT)."""
         if event.key == "ctrl+r":
             self.ta.redo()
             self._clear_pending()
             return
-        if not event.is_printable or event.character is None:
+        if event.key in self.KEY_ALIASES:
+            char = self.KEY_ALIASES[event.key]
+        elif not event.is_printable or event.character is None:
             return
-        char = event.character
+        else:
+            char = event.character
 
         if self._pending is not None:
             self._handle_pending_char(char)
