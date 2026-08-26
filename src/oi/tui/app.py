@@ -1260,9 +1260,14 @@ class OiApp(App):
 
     async def _mount_history(self, start: int) -> None:
         """Mount the active path from message index `start` on."""
+        chat = self._chat
+        # Before the import: a new chat mounts on the main thread ahead of
+        # the warm-up, and pydantic_ai's import would land before the first
+        # paint (see `warmup.py`).
+        if not chat.messages[start:]:
+            return
         from pydantic_ai.messages import ModelResponse
 
-        chat = self._chat
         indices = user_message_indices(chat.messages)
         user_row = len([index for index in indices if index < start])
         for message in chat.messages[start:]:
