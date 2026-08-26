@@ -12,7 +12,7 @@ from oi.core.message_utils import (
     deserialize_model_messages,
     serialize_model_messages,
 )
-from oi.core.session import Chat, ChatMetadata
+from oi.core.session import Branch, Chat, ChatMetadata
 from oi.exceptions import ChatNotFoundError
 
 CHAT_LOAD_EXCEPTIONS = (
@@ -100,6 +100,15 @@ class ChatRepository:
         with open(chat_dir / "messages.json", "w") as f:
             json.dump(messages_payload, f, indent=2)
 
+        # Dormant branches live beside the active path, which stays the whole
+        # `messages.json` so every other reader keeps working.
+        branches_file = chat_dir / "branches.json"
+        if chat.branches:
+            with open(branches_file, "w") as f:
+                json.dump([branch.to_dict() for branch in chat.branches], f)
+        elif branches_file.exists():
+            branches_file.unlink()
+
     def save_metadata(self, metadata: ChatMetadata) -> None:
         """Persist chat metadata without touching message files or timestamps."""
         chat_dir = self.chat_path(metadata.id)
@@ -130,7 +139,13 @@ class ChatRepository:
         else:
             messages = convert_legacy_messages(raw_messages)
 
-        return Chat(metadata=metadata, messages=messages)
+        branches: list[Branch] = []
+        branches_file = chat_dir / "branches.json"
+        if branches_file.exists():
+            with open(branches_file, "r") as f:
+                branches = [Branch.from_dict(item) for item in json.load(f)]
+
+        return Chat(metadata=metadata, messages=messages, branches=branches)
 
     def try_load_chat(
         self,

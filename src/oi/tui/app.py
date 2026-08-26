@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Optional, Sequence, Union, cast
 if TYPE_CHECKING:
     from textual.document._document import Document
 
-    from pydantic_ai.messages import BinaryContent, UserContent
+    from pydantic_ai.messages import BinaryContent, ModelResponse, UserContent
 
     UserContentInput = Union[str, Sequence[UserContent]]
 
@@ -32,8 +32,9 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.geometry import Offset, Size
+from textual.geometry import Offset, Region, Size
 from textual.message import Message
+from textual.widget import Widget
 from textual.widgets import Markdown, Static, TextArea
 from textual.widgets.text_area import Edit, EditResult, Selection, TextAreaTheme
 from textual.timer import Timer
@@ -52,8 +53,15 @@ from oi.app import (
     enable_search,
     toggle_setting,
 )
-from oi.core.message_utils import flatten_history, latest_system_prompt
-from oi.core.session import Chat
+from oi.core.message_utils import (
+    flatten_history,
+    latest_system_prompt,
+    split_user_content,
+    text_part_separator,
+    user_message_indices,
+)
+from oi.core.session import Branch, Chat
+from oi.response_handler import coerce_tool_args
 from oi.llm_types import ModelCapabilities
 from oi.local_commands import (
     LOCAL_COMMANDS,
@@ -109,6 +117,11 @@ VIM_MODE_HINTS = {
     VimMode.VISUAL_LINE: "-- VISUAL LINE --",
 }
 
+# History mode: walking the user messages to edit one or switch its branch.
+HISTORY_HINT = "↑↓ message · ←→ branch · enter edit · esc"
+EDIT_HINT = "editing · enter starts a new branch · esc cancels"
+BADGE_STYLE = Style(color="bright_black")
+
 # Marker for ephemeral `/btw` side answers: hollow = not saved to the chat.
 BTW_MARKER = "○ "
 
@@ -150,6 +163,17 @@ def _pill_text(text: str) -> Text:
     return result
 
 
+def _user_row(text: str, badge: Optional[str]) -> Horizontal:
+    """A user message row, with its sibling badge on a line of its own below
+    the message (a separate widget, so the history highlight can leave it
+    out)."""
+    column = Vertical(Static(_pill_text(text), classes="message"), classes="content")
+    row = _row(USER_LABEL, column)
+    if badge:
+        column.compose_add_child(Static(Text(badge, BADGE_STYLE), classes="badge"))
+    return row
+
+
 class Notice(Message):
     """A status line (info/warning/error) to mount in the log."""
 
@@ -166,15 +190,28 @@ class TurnFinished(Message):
     pulled back into the input instead of showing an interrupted turn.
     `persist` asks the app to save the chat (set when an interrupted turn kept
     its exchange — the worker can't persist itself mid-cancellation).
+    `failed` marks a request error: the message was dropped from history.
+    `restore` is the branch to put back when a forked turn ended without a
+    message to show for it.
     """
 
     def __init__(
-        self, interrupted: bool, *, unsent: bool = False, persist: bool = False
+        self,
+        interrupted: bool,
+        *,
+        unsent: bool = False,
+        failed: bool = False,
+        persist: bool = False,
+        restore: Optional[Branch] = None,
     ) -> None:
         super().__init__()
         self.interrupted = interrupted
         self.unsent = unsent
+        self.failed = failed
         self.persist = persist
+        # The branch a fork displaced, when the turn left nothing in its
+        # place and that branch should come back.
+        self.restore = restore
 
 
 def _row(
@@ -265,6 +302,24 @@ class ResponseView(Vertical):
 class ChatLog(VerticalScroll):
     """The conversation pane: bottom-anchored, told about resizes up front."""
 
+    class Scrolled(Message):
+        """The pane scrolled (by the user or programmatically)."""
+
+    @property
+    def scroll_offset(self) -> Offset:
+        # Anchoring sets `scroll_y` to content-bottom minus height, which is
+        # negative while the conversation is shorter than the pane: the
+        # compositor would then paint it bottom-aligned, hugging the input.
+        # Clamped so a short chat starts at the top (CC-style) and grows
+        # downward, and only once it fills the pane does the anchor hold it
+        # to the bottom. Scrolling and rendering both go through this offset.
+        offset = super().scroll_offset
+        return Offset(offset.x, max(offset.y, 0))
+
+    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        super().watch_scroll_y(old_value, new_value)
+        self.post_message(self.Scrolled())
+
     def preempt_resize(self, delta: int) -> None:
         """Record the height this pane is about to have, `delta` rows shorter.
 
@@ -294,8 +349,9 @@ class ChatInput(TextArea):
     """
 
     class Submitted(Message):
-        def __init__(self, text: str) -> None:
+        def __init__(self, input: "ChatInput", text: str) -> None:
             super().__init__()
+            self.input = input
             self.text = text
 
     class MenuKey(Message):
@@ -309,6 +365,27 @@ class ChatInput(TextArea):
         "ctrl+p": "up",
     }
 
+    class CaretMoved(Message):
+        """An inline editor's caret was (re)positioned on screen."""
+
+    class HistoryKey(Message):
+        """A key pressed in history mode (or `up` on an empty input to enter
+        it): `enter`, `up`, `down`, `prev`, `next`, `edit`, `exit`."""
+
+        def __init__(self, action: str) -> None:
+            super().__init__()
+            self.action = action
+
+    _HISTORY_KEYS = {
+        "up": "up",
+        "down": "down",
+        "left": "prev",
+        "right": "next",
+        "enter": "edit",
+        "escape": "exit",
+    }
+    _HISTORY_VIM_KEYS = {"k": "up", "j": "down", "h": "prev", "l": "next"}
+
     class VimModeChanged(Message):
         """Vim mode changed; `mode` is None when vim mode is off."""
 
@@ -316,8 +393,12 @@ class ChatInput(TextArea):
             super().__init__()
             self.mode = mode
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, *, inline: bool = False, id: Optional[str] = None) -> None:
+        """`inline`: an editor standing in for a message inside the log
+        (see `OiApp._edit_selected`) rather than the compose box pinned at
+        the bottom — it grows without a cap and never moves the pane above."""
+        super().__init__(id=id)
+        self.inline = inline
         self.show_line_numbers = False
         # The hardware terminal cursor is used instead (steady, mode-shaped);
         # the painted cursor is never drawn and must not blink in tests.
@@ -330,6 +411,12 @@ class ChatInput(TextArea):
         self.match_cursor_bracket = False
         self.vim: Optional[VimHandler] = None
         self._images: dict[int, BinaryContent] = {}
+        # Whether `up` on an empty input may walk the history (there are user
+        # messages, and no turn is streaming); the app keeps it current.
+        self.history_available = False
+        # Flipped here, synchronously with the key, so the keys typed right
+        # behind it are routed by the mode they were typed in.
+        self.history_mode = False
 
     def set_vim_enabled(self, enabled: bool) -> None:
         if enabled and self.vim is None:
@@ -363,11 +450,37 @@ class ChatInput(TextArea):
     def _menu_is_open(self) -> bool:
         return self.screen.query_one(SlashMenu).is_open
 
+    def _history_action(self, key: str) -> Optional[str]:
+        action = self._HISTORY_KEYS.get(key)
+        if action is None and self.vim is not None:
+            action = self._HISTORY_VIM_KEYS.get(key)
+        return action
+
     async def _on_key(self, event) -> None:
+        if self.history_mode:
+            action = self._history_action(event.key)
+            if action is not None:
+                event.stop()
+                event.prevent_default()
+                self.post_message(self.HistoryKey(action))
+                return
+            # Any other key leaves history mode and means what it always does.
+            self.history_mode = False
+            self.post_message(self.HistoryKey("exit"))
+        elif (
+            self.history_available
+            and not self.text
+            and (event.key == "up" or (self._vim_normal and event.key == "k"))
+        ):
+            event.stop()
+            event.prevent_default()
+            self.history_mode = True
+            self.post_message(self.HistoryKey("enter"))
+            return
         if event.key == "enter":
             event.stop()
             event.prevent_default()
-            self.post_message(self.Submitted(self.text))
+            self.post_message(self.Submitted(self, self.text))
             return
         if event.key in ("shift+enter", "ctrl+j"):
             event.stop()
@@ -411,6 +524,10 @@ class ChatInput(TextArea):
             event.prevent_default()
             return
         await super()._on_key(event)
+
+    @property
+    def _vim_normal(self) -> bool:
+        return self.vim is not None and self.vim.mode is VimMode.NORMAL
 
     @property
     def text_before_cursor(self) -> str:
@@ -480,6 +597,8 @@ class ChatInput(TextArea):
         # correct it while a resize is still pending (vim moves the cursor
         # after the edit that changed the height, so this is that path).
         self._sync_terminal_cursor()
+        if getattr(self, "inline", False):
+            self.reveal_cursor()
         if not getattr(self, "_images", None):
             return
         snapped = self._snap_selection(previous_selection, selection)
@@ -626,16 +745,104 @@ class ChatInput(TextArea):
         layout property, and writing it on every keystroke would relayout the
         whole screen.
         """
-        height = min(max(self.wrapped_document.height, 1), MAX_INPUT_HEIGHT)
+        height = max(self.wrapped_document.height, 1)
+        if not self.inline:
+            height = min(height, MAX_INPUT_HEIGHT)
         current = self.styles.height
         if current is None or current.value != height:
             delta = height - int(current.value) if current is not None else 0
             self.styles.height = height
-            if delta:
+            if delta and not self.inline:
                 # The pane above loses exactly the rows the input gained.
                 self.screen.query_one(ChatLog).preempt_resize(delta)
             self._sync_terminal_cursor()
             self.call_after_refresh(self._sync_terminal_cursor)
+            if self.inline:
+                self.call_after_refresh(self.reveal_cursor)
+
+    def _log_virtual_offset(self, x: int, y: int) -> Offset:
+        """Map a point in this editor's content to the log's virtual space.
+
+        Summed from the layout-stable `virtual_region` of each widget up to
+        the log, so the result holds while a log scroll is still in flight —
+        unlike anything derived from screen `region`s, which the compositor
+        moves only on its next pass.
+        """
+        log = self.screen.query_one(ChatLog)
+        node: Widget = self
+        while node is not log:
+            x += node.virtual_region.x
+            y += node.virtual_region.y
+            parent = node.parent
+            assert isinstance(parent, Widget)
+            node = parent
+        return Offset(x, y)
+
+    def _caret_rows(self) -> tuple[int, int]:
+        """First and last wrapped row of the caret's logical line, plus the
+        caret's own row — in this editor's content coordinates."""
+        line, _ = self.cursor_location
+        first = self.wrapped_document.location_to_offset((line, 0)).y
+        last = self.wrapped_document.location_to_offset(
+            (line, len(self.document[line]))
+        ).y
+        return first, last
+
+    def _caret_offset(self) -> Offset:
+        """The caret's screen position, measured now.
+
+        Not `cursor_screen_offset`: TextArea caches the caret's offset in the
+        wrapped document and refreshes it only when the cursor moves, so after
+        a re-wrap (the editor mounting at its real width) it names the row the
+        caret had *before* the wrap until the next keystroke — and it is read
+        off the editor's screen region, which lags a log scroll by a frame.
+        """
+        log = self.screen.query_one(ChatLog)
+        x, y = self.wrapped_document.location_to_offset(self.cursor_location)
+        virtual = self._log_virtual_offset(x + self.gutter_width, y)
+        return log.content_region.offset + virtual - log.scroll_offset
+
+    def reveal_cursor(self) -> None:
+        """Scroll the log so an inline editor's caret is on screen — with the
+        caret's whole logical line when that fits, so a vim `j` onto a wrapped
+        line shows all of it, the way ↓ does.
+
+        A TextArea scrolls itself to its cursor, not its container; an inline
+        editor never scrolls itself (no height cap), so the log has to.
+        """
+        log = self.screen.query_one(ChatLog)
+        x, caret_row = self.wrapped_document.location_to_offset(self.cursor_location)
+        first, last = self._caret_rows()
+        if last - first + 1 > log.content_region.height:
+            first = last = caret_row
+        origin = self._log_virtual_offset(x + self.gutter_width, first)
+        log.scroll_to_region(
+            Region(origin.x, origin.y, 1, last - first + 1),
+            animate=False,
+            immediate=True,
+        )
+        self._sync_terminal_cursor()
+        # Once the layout has settled, so the app can check where the caret
+        # actually ended up.
+        self.call_after_refresh(self.post_message, self.CaretMoved())
+
+    def scroll_cursor_visible(self, center: bool = False, animate: bool = False):
+        scrolled = super().scroll_cursor_visible(center, animate)
+        if not self.inline:
+            return scrolled
+        # Never keep an internal scroll: the widget is sized to its text, but
+        # until the layout pass catches up with a growth it is still the old
+        # height, and a scroll taken then would stick — cutting the last
+        # lines off after the widget has grown to fit them.
+        self.scroll_to(0, 0, animate=False, immediate=True, force=True)
+        self.reveal_cursor()
+        return Offset(0, 0)
+
+    def caret_on_screen(self) -> bool:
+        """Whether an inline editor's caret row is inside the log's viewport
+        (the terminal cursor is hidden while it is scrolled out of view)."""
+        offset = self._caret_offset()
+        return self.screen.query_one(ChatLog).content_region.contains_point(offset)
 
     def _pending_resize_delta(self) -> int:
         """Rows the input is about to gain once the layout catches up."""
@@ -655,6 +862,8 @@ class ChatInput(TextArea):
         about to be zero: the height only changes while the wrapped text fits
         (past the cap it stays pinned at the cap, scrolling instead).
         """
+        if self.inline:
+            return self._caret_offset()
         offset = self.cursor_screen_offset
         delta = self._pending_resize_delta()
         if not delta:
@@ -685,6 +894,9 @@ class ChatInput(TextArea):
     def on_resize(self, event) -> None:
         self.sync_height()
         self.call_after_refresh(self._sync_terminal_cursor)
+        if self.inline:
+            # Mounting resizes from the CSS height to the real width's wrap.
+            self.call_after_refresh(self.reveal_cursor)
 
 
 class OiApp(App):
@@ -721,6 +933,10 @@ class OiApp(App):
     .system { color: ansi_bright_black; height: auto; }
     .notice { height: auto; }
     .user-label { color: ansi_bright_black; text-style: bold; }
+    .message { height: auto; }
+    .badge { height: auto; }
+    .row.selected .user-label { background: ansi_bright_black; color: ansi_default; }
+    .row.selected .message { background: ansi_bright_black; }
     .ai-label { color: ansi_bright_white; }
     .info-label { color: ansi_bright_black; }
     .warning-label { color: ansi_yellow; }
@@ -784,6 +1000,8 @@ class OiApp(App):
         border: none;
         padding: 0;
         background: transparent;
+        /* An inline editor sits in the content column of its row (the log
+           adds no side chrome), so its wrap matches the text it replaces. */
         /* Past the height cap the input scrolls, but a visible scrollbar
            would narrow the wrap width and re-wrap everything already typed. */
         scrollbar-size-vertical: 0;
@@ -861,6 +1079,17 @@ class OiApp(App):
         # images), kept so an early interrupt can unsend the message.
         self._pending_user_row: Optional[Horizontal] = None
         self._pending_submission: Optional[tuple[str, dict[int, BinaryContent]]] = None
+        # The echoed rows of the user messages on the active path, aligned
+        # with `user_message_indices(chat.messages)` (the live turn's row is
+        # appended at submit and removed again if the message is unsent).
+        self._user_rows: list[Horizontal] = []
+        # History mode: which of `_user_rows` is highlighted.
+        self._history_index: Optional[int] = None
+        # A message being edited in place: its index and the inline editor
+        # standing in for its row's text.
+        self._edit_index: Optional[int] = None
+        self._inline_editor: Optional[ChatInput] = None
+        self._cursor_visible = True
         self._capabilities: Optional[ModelCapabilities] = None
         self._header_message_count = current_chat.metadata.message_count
 
@@ -872,7 +1101,7 @@ class OiApp(App):
         yield SlashMenu()
         with Horizontal(id="input-row"):
             yield Static(Text("❯ "), id="prompt-marker")
-            yield ChatInput()
+            yield ChatInput(id="input")
         yield Static(id="hint")
 
     async def on_mount(self) -> None:
@@ -882,7 +1111,7 @@ class OiApp(App):
         )
         await self._replay_session_context()
         self._chat_log.anchor()
-        input_widget = self.query_one(ChatInput)
+        input_widget = self._input
         input_widget.set_vim_enabled(self._ctx.config.vim_mode)
         input_widget.sync_height()
         input_widget.focus()
@@ -905,6 +1134,27 @@ class OiApp(App):
         self._write_terminal("\x1b[6 q" if bar else "\x1b[2 q")
         self._refresh_hint()
 
+    @on(ChatLog.Scrolled)
+    @on(ChatInput.CaretMoved)
+    def _on_caret_may_have_moved(self) -> None:
+        # After the refresh: a scroll changes the caret's screen position only
+        # once the layout pass has moved the editor.
+        self.call_after_refresh(self._sync_cursor_visibility)
+
+    def _sync_cursor_visibility(self) -> None:
+        """Hide the terminal cursor while an inline editor's caret is scrolled
+        out of the log: Textual keeps placing it at the caret's screen offset,
+        clamped to the screen, which lands it on the compose box's border.
+        While it is on screen, re-point it — the log scrolling under the
+        editor moves the caret without the editor hearing about it."""
+        editor = self._inline_editor
+        visible = editor is None or editor.caret_on_screen()
+        if visible != self._cursor_visible:
+            self._cursor_visible = visible
+            self._write_terminal("\x1b[?25h" if visible else "\x1b[?25l")
+        if editor is not None and visible:
+            editor._sync_terminal_cursor()
+
     def _set_hint(self, text: str) -> None:
         if self._hint_timer is not None:
             self._hint_timer.stop()
@@ -925,7 +1175,13 @@ class OiApp(App):
         self._set_hint("  ".join(part for part in segments if part))
 
     def _turn_hint(self) -> str:
-        return "esc to interrupt" if self._turn_active else ""
+        if self._turn_active:
+            return "esc to interrupt"
+        if self._history_index is not None:
+            return HISTORY_HINT
+        if self._edit_index is not None:
+            return EDIT_HINT
+        return ""
 
     def _flash_hint(self, text: str, seconds: float) -> None:
         """Show a hint that reverts to the state's own hint on its own."""
@@ -939,6 +1195,11 @@ class OiApp(App):
     @property
     def _chat_log(self) -> ChatLog:
         return self.query_one("#log", ChatLog)
+
+    @property
+    def _input(self) -> ChatInput:
+        """The compose box at the bottom (an inline editor is a second one)."""
+        return self.query_one("#input", ChatInput)
 
     def _search_active(self) -> bool:
         """Whether this session's turns actually get a web search tool.
@@ -994,56 +1255,173 @@ class OiApp(App):
                 Static(Text(marker + system_message), classes="system")
             )
 
-        for role, content in history:
-            if role == "user":
-                await self._mount_user_row(content)
-            else:
-                view = ResponseView()
-                row = _row(AI_LABEL, view)
-                await self._chat_log.mount(row)
-                await view.mount(Markdown(content))
+        await self._mount_history(0)
+        self._refresh_history_available()
+
+    async def _mount_history(self, start: int) -> None:
+        """Mount the active path from message index `start` on."""
+        from pydantic_ai.messages import ModelResponse
+
+        chat = self._chat
+        indices = user_message_indices(chat.messages)
+        user_row = len([index for index in indices if index < start])
+        for message in chat.messages[start:]:
+            if isinstance(message, ModelResponse):
+                await self._replay_response(message)
+                continue
+            for _, content in flatten_history([message]):
+                row = await self._mount_user_row(
+                    content, badge=self._badge(indices[user_row])
+                )
+                self._user_rows.append(row)
+                user_row += 1
+
+    async def _replay_response(self, response: ModelResponse) -> None:
+        """Mount a stored response the way its stream was shown.
+
+        The parts are fed to the same handlers the live turn uses, so tool
+        lines (wrapper suppression, result counts) and the segment order of
+        thinking/text/tool blocks come out identical to what was on screen.
+        """
+        from pydantic_ai.messages import (
+            NativeToolCallPart,
+            NativeToolReturnPart,
+            TextPart,
+            ThinkingPart,
+        )
+
+        self._on_response_started(ResponseStarted(None))
+        show_thinking = self._ctx.chat_options.show_thinking
+        text = ""
+        for part in [*response.parts, None]:
+            if isinstance(part, TextPart):
+                # A run of text parts (one per citation) was one stream.
+                text += text_part_separator(text, part.content) + part.content
+                continue
+            if text.strip():
+                view = await self._ensure_response_view()
+                await view.end_stream()
+                await view.mount(Markdown(text))
+            text = ""
+            if part is None:
+                break
+            if isinstance(part, ThinkingPart):
+                if show_thinking and part.content.strip():
+                    view = await self._ensure_response_view()
+                    await view.append_thinking(part.content)
+            elif isinstance(part, ThinkingPart):
+                if show_thinking and part.content.strip():
+                    view = await self._ensure_response_view()
+                    await view.append_thinking(part.content)
+            elif isinstance(part, NativeToolCallPart):
+                await self._on_native_tool_call(
+                    NativeToolCall(
+                        part.tool_call_id,
+                        part.tool_name,
+                        coerce_tool_args(part.args),
+                        from_code="anthropic_caller" in (part.provider_details or {}),
+                    )
+                )
+            elif isinstance(part, NativeToolReturnPart):
+                await self._on_native_tool_return(
+                    NativeToolReturn(part.tool_call_id, part.tool_name, part.content)
+                )
+        interrupted = response.state == "interrupted"
+        if interrupted and self._active_view is None:
+            await self._ensure_response_view()
+        if self._active_view is not None:
+            await self._active_view.finalize(interrupted=interrupted)
+        self._response_active = False
+        self._active_view = None
+        self._tool_block = None
+        self._tool_lines = {}
+        self._stashed_web_args = []
+
+    def _badge(self, index: int) -> Optional[str]:
+        """`‹ 2/3 ›` for a user message with alternatives, else nothing."""
+        position, total = self._chat.sibling_position(index)
+        return f"‹ {position}/{total} ›" if total > 1 else None
+
+    async def _unmount_from(self, row: int) -> None:
+        """Remove user row `row` and everything mounted after it."""
+        widget = self._user_rows[row]
+        children = list(self._chat_log.children)
+        await self._chat_log.remove_children(children[children.index(widget) :])
+        del self._user_rows[row:]
 
     async def _mount_notice(self, label: LabelStyle, text: str) -> None:
         await self._chat_log.mount(_notice_widget(label, text))
 
-    async def _mount_user_row(self, text: str) -> Horizontal:
+    async def _mount_user_row(
+        self, text: str, *, badge: Optional[str] = None
+    ) -> Horizontal:
         """Echo a user message, keeping image markers styled as pills."""
-        row = _row(USER_LABEL, Static(_pill_text(text), classes="content"))
+        row = _user_row(text, badge)
         await self._chat_log.mount(row)
         return row
+
+    async def _set_badge(self, row: int, index: int) -> None:
+        widget = self._user_rows[row]
+        await widget.query(".badge").remove()
+        badge = self._badge(index)
+        if badge:
+            await widget.query_one(".content").mount(
+                Static(Text(badge, BADGE_STYLE), classes="badge")
+            )
 
     # --- input ----------------------------------------------------------
 
     @on(ChatInput.Submitted)
     async def _on_submitted(self, message: ChatInput.Submitted) -> None:
         text = message.text.strip()
-        input_widget = self.query_one(ChatInput)
+        input_widget = message.input
         if not text:
             return
         # `_turn_active` rather than the worker: it is set synchronously here,
         # and the worker only starts a frame later.
         if self._turn_active:
             return
+        if not input_widget.inline and self._inline_editor is not None:
+            # Sending from the compose box abandons the edit in progress.
+            await self._cancel_edit()
 
-        parsed_command = parse_local_command(text)
+        # An inline edit is always a message, never a command.
+        parsed_command = None if input_widget.inline else parse_local_command(text)
         # Take the images before clearing the input (clearing reconciles the
         # marker registry down to nothing). The raw submission is stashed
         # first so an early interrupt can hand the message back unchanged.
         if parsed_command is None:
             self._pending_submission = (text, input_widget.snapshot_images())
         content = None if parsed_command else input_widget.consume_content(text)
+        fork_index = None
+        if input_widget.inline:
+            fork_index, self._edit_index = self._edit_index, None
+            self._inline_editor = None
+            self._input.focus()
+            self._sync_cursor_visibility()
 
         # Hold the paint until the echoed row is actually mounted, so the
         # input clearing and the row appearing are one frame. Mounting takes a
         # refresh cycle of its own, so without the batch the input empties a
         # frame (plus a full relayout) before the message shows up.
         with self.batch_update():
-            input_widget.clear()
-            input_widget.vim_reset()
-            input_widget.sync_height()
+            if fork_index is not None:
+                # The edited message (editor included) and its branch leave
+                # the screen together with the new message appearing, so the
+                # fork is one frame.
+                await self._unmount_from(
+                    user_message_indices(self._chat.messages).index(fork_index)
+                )
+                self._chat_log.anchor()
+            else:
+                input_widget.clear()
+                input_widget.vim_reset()
+                input_widget.sync_height()
             row = await self._mount_user_row(text)
         if parsed_command is None:
             self._pending_user_row = row
+            self._user_rows.append(row)
+        self._refresh_hint()
 
         if parsed_command is not None:
             command_name, command_args = parsed_command
@@ -1054,14 +1432,17 @@ class OiApp(App):
         self._exit_armed_at = None
         self._turn_active = True
         self._refresh_hint()
+        self._refresh_history_available()
         # Starting the turn blocks the event loop for as long as pydantic-ai
         # takes to build the model — hundreds of ms on the first turn of a run,
         # when it also imports the provider SDK. Wait for the echoed row to be
         # on screen before paying that, or the message looks stuck in the input.
-        self.call_after_refresh(self._start_turn, content)
+        self.call_after_refresh(self._start_turn, content, fork_index)
 
-    def _start_turn(self, content: UserContentInput) -> None:
-        self._turn_worker = self.run_worker(self._run_turn(content), exclusive=True)
+    def _start_turn(self, content: UserContentInput, fork_index: Optional[int]) -> None:
+        self._turn_worker = self.run_worker(
+            self._run_turn(content, fork_index), exclusive=True
+        )
 
     async def _handle_local_command(self, command_name: str, command_args: str) -> None:
         if command_name not in LOCAL_COMMANDS:
@@ -1096,7 +1477,7 @@ class OiApp(App):
         if setting is not None:
             label, message = toggle_setting(setting, self._ctx.config)
             if setting.key == "vim_mode":
-                self.query_one(ChatInput).set_vim_enabled(self._ctx.config.vim_mode)
+                self._input.set_vim_enabled(self._ctx.config.vim_mode)
             await self._mount_notice(label, message)
             return
 
@@ -1128,6 +1509,8 @@ class OiApp(App):
     async def _on_input_changed(self, event: TextArea.Changed) -> None:
         if isinstance(event.text_area, ChatInput):
             event.text_area.sync_height()
+            if event.text_area.inline:
+                return
             prefix = get_slash_prefix(
                 event.text_area.text, event.text_area.text_before_cursor
             )
@@ -1140,7 +1523,10 @@ class OiApp(App):
             await menu.update_filter(None)
             return
         if message.action == "interrupt":
-            self.action_interrupt()
+            if self._inline_editor is not None:
+                await self._cancel_edit()
+            else:
+                self.action_interrupt()
             return
         if message.action in ("up", "down"):
             menu.move(-1 if message.action == "up" else 1)
@@ -1148,17 +1534,157 @@ class OiApp(App):
         if message.action == "complete":
             selected = menu.selected_name
             if selected is not None:
-                input_widget = self.query_one(ChatInput)
+                input_widget = self._input
                 input_widget.text = selected + " "
                 input_widget.move_cursor(input_widget.document.end)
 
+    # --- history mode ---------------------------------------------------
+
+    def _refresh_history_available(self) -> None:
+        self._input.history_available = bool(self._user_rows) and not self._turn_active
+
+    @on(ChatInput.HistoryKey)
+    async def _on_history_key(self, message: ChatInput.HistoryKey) -> None:
+        action = message.action
+        if action == "enter":
+            if self._inline_editor is not None:
+                await self._cancel_edit()
+            self._select_history_row(len(self._user_rows) - 1)
+            return
+        if self._history_index is None:
+            return
+        if action == "exit":
+            self._leave_history()
+        elif action == "up":
+            self._select_history_row(max(self._history_index - 1, 0))
+        elif action == "down":
+            # Past the newest message is the prompt again, shell-style.
+            if self._history_index + 1 < len(self._user_rows):
+                self._select_history_row(self._history_index + 1)
+            else:
+                self._leave_history()
+        elif action in ("prev", "next"):
+            await self._switch_branch(-1 if action == "prev" else 1)
+        elif action == "edit":
+            await self._edit_selected()
+
+    def _select_history_row(self, row: int) -> None:
+        if self._history_index is not None:
+            self._user_rows[self._history_index].remove_class("selected")
+        self._history_index = row
+        widget = self._user_rows[row]
+        widget.add_class("selected")
+        # The anchor would pull a freshly mounted (longer) branch back to the
+        # bottom; and a widget mounted this frame has no region to scroll to
+        # until the layout pass runs.
+        self._chat_log.anchor(False)
+        self.call_after_refresh(self._chat_log.scroll_to_widget, widget, animate=False)
+        self._refresh_hint()
+
+    def _leave_history(self, *, anchor: bool = True) -> None:
+        if self._history_index is not None:
+            self._user_rows[self._history_index].remove_class("selected")
+        self._history_index = None
+        self._input.history_mode = False
+        if anchor:
+            self._chat_log.anchor()
+        self._refresh_hint()
+
+    def _selected_message_index(self) -> int:
+        assert self._history_index is not None
+        return user_message_indices(self._chat.messages)[self._history_index]
+
+    async def _switch_branch(self, direction: int) -> None:
+        """Show the previous/next alternative at the highlighted message."""
+        row = self._history_index
+        assert row is not None
+        index = self._selected_message_index()
+        siblings = self._chat.siblings_at(index)
+        target = siblings.index(None) + direction
+        if not 0 <= target < len(siblings):
+            return
+        branch = siblings[target]
+        assert branch is not None
+        self._chat.switch_to(branch)
+        with self.batch_update():
+            await self._unmount_from(row)
+            await self._mount_history(index)
+        self._select_history_row(row)
+        if not self._ctx.ephemeral:
+            await asyncio.to_thread(self._ctx.chat_manager.save_chat, self._chat)
+
+    async def _edit_selected(self) -> None:
+        """Edit the highlighted message where it stands; submit forks there."""
+        row = self._history_index
+        index = self._selected_message_index()
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+        message = self._chat.messages[index]
+        assert isinstance(message, ModelRequest)
+        content = next(
+            part.content for part in message.parts if isinstance(part, UserPromptPart)
+        )
+        # Not re-anchored: the editor must stay where the message is.
+        self._leave_history(anchor=False)
+        assert row is not None
+        await self._open_inline_editor(row, index, *split_user_content(content))
+
+    async def _open_inline_editor(
+        self, row: int, index: int, text: str, images: dict[int, BinaryContent]
+    ) -> None:
+        """Swap the text of user row `row` for an editor holding `text`."""
+        widget = self._user_rows[row]
+        editor = ChatInput(inline=True)
+        self._inline_editor = editor
+        self._edit_index = index
+        message = widget.query_one(".message", Static)
+        message.display = False
+        await widget.query_one(".content").mount(editor, before=message)
+        editor.set_vim_enabled(self._ctx.config.vim_mode)
+        editor.restore_content(text, images)
+        editor.focus()
+        self._refresh_hint()
+
+    async def _cancel_edit(self) -> None:
+        editor = self._inline_editor
+        assert editor is not None
+        self._inline_editor = None
+        self._edit_index = None
+        row = editor.parent
+        assert row is not None
+        await editor.remove()
+        row.query_one(".message", Static).display = True
+        self._input.focus()
+        self._chat_log.anchor()
+        self._sync_cursor_visibility()
+        self._refresh_hint()
+
+    async def _restore_branch(
+        self,
+        branch: Branch,
+        submission: Optional[tuple[str, dict[int, BinaryContent]]],
+    ) -> None:
+        """Put back the branch a fork displaced when its turn produced nothing,
+        with the message that displaced it open for editing again."""
+        self._chat.switch_to(branch)
+        row = len(self._user_rows)
+        await self._mount_history(branch.at)
+        if submission is not None:
+            await self._open_inline_editor(row, branch.at, *submission)
+
     # --- streaming turn -------------------------------------------------
 
-    async def _run_turn(self, content: UserContentInput) -> None:
+    async def _run_turn(
+        self, content: UserContentInput, fork_index: Optional[int] = None
+    ) -> None:
         await asyncio.to_thread(warmup.ensure)
         chat = self._chat
         ctx = self._ctx
-        chat.append_user_message(content)
+        displaced = None
+        if fork_index is not None:
+            displaced = chat.fork_at(fork_index, content)
+        else:
+            chat.append_user_message(content)
         options = replace(
             ctx.chat_options,
             notify=lambda msg: self.post_message(Notice(INFO_LABEL, msg)),
@@ -1188,11 +1714,15 @@ class OiApp(App):
                 # Nothing seen yet: unsend — the message goes back to the
                 # input for review instead of being lost.
                 chat.discard_pending_user_message()
-                self.post_message(TurnFinished(interrupted=True, unsent=True))
+                self.post_message(
+                    TurnFinished(interrupted=True, unsent=True, restore=displaced)
+                )
             raise
         except Exception as exc:
             chat.discard_pending_user_message()
-            self.post_message(TurnFinished(interrupted=False))
+            self.post_message(
+                TurnFinished(interrupted=False, failed=True, restore=displaced)
+            )
             self.post_message(
                 Notice(ERROR_LABEL, f"Request failed: {type(exc).__name__}: {exc}")
             )
@@ -1270,7 +1800,7 @@ class OiApp(App):
             await self._mount_notice(INFO_LABEL, "No image found in the clipboard.")
             return
         data, media_type = image
-        input_widget = self.query_one(ChatInput)
+        input_widget = self._input
         input_widget.attach_image(BinaryContent(data=data, media_type=media_type))
         input_widget.focus()
 
@@ -1411,7 +1941,15 @@ class OiApp(App):
         if message.unsent:
             # Interrupted before any output: no interrupted turn to show —
             # the message comes back to the input for review instead.
-            await self._retract_user_message()
+            await self._retract_user_message(restore_input=message.restore is None)
+        elif message.failed:
+            # The message is no longer on the path. Its echo stays as a record
+            # of what was sent, unless a displaced branch is coming back in
+            # its place.
+            if message.restore is not None:
+                await self._retract_user_message(restore_input=False)
+            else:
+                self._user_rows.pop()
         elif message.interrupted and self._active_view is None:
             # A kept interrupt with no storable output: still show it was
             # cancelled.
@@ -1420,21 +1958,30 @@ class OiApp(App):
             await self._active_view.finalize(interrupted=message.interrupted)
             self._active_view = None
         self._pending_user_row = None
-        self._pending_submission = None
+        submission, self._pending_submission = self._pending_submission, None
         self._response_label = None
         self._tool_block = None
         self._tool_lines = {}
         self._stashed_web_args = []
+        if message.restore is not None:
+            await self._restore_branch(message.restore, submission)
+        elif self._user_rows and not (message.unsent or message.failed):
+            row = len(self._user_rows) - 1
+            await self._set_badge(row, user_message_indices(self._chat.messages)[row])
+        self._refresh_history_available()
         if message.persist:
             await asyncio.to_thread(self._persist_turn)
 
-    async def _retract_user_message(self) -> None:
-        """Pull the unsent message out of the log and back into the input."""
+    async def _retract_user_message(self, *, restore_input: bool = True) -> None:
+        """Pull the unsent message out of the log and back into the input
+        (a fork's message goes back to its inline editor instead, via
+        `_restore_branch`)."""
         if self._pending_user_row is not None:
             await self._pending_user_row.remove()
-        if self._pending_submission is not None:
+            self._user_rows.pop()
+        if self._pending_submission is not None and restore_input:
             text, images = self._pending_submission
-            self.query_one(ChatInput).restore_content(text, images)
+            self._input.restore_content(text, images)
 
     # --- actions ---------------------------------------------------------
 
@@ -1475,7 +2022,7 @@ class OiApp(App):
         self.clear_selection()
         self._exit_armed_at = None
         self._flash_hint("copied to clipboard", HINT_FLASH_SECONDS)
-        self.query_one(ChatInput).focus()
+        self._input.focus()
         return True
 
     def action_copy_selection(self) -> None:

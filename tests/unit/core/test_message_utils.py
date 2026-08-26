@@ -112,3 +112,36 @@ def test_prune_interrupted_response_returns_none_without_substance():
         prune_interrupted_response(ModelResponse(parts=[TextPart(content="  \n")]))
         is None
     )
+
+
+def test_split_user_content_inverts_the_image_markers():
+    from pydantic_ai.messages import BinaryContent
+
+    from oi.core.message_utils import split_user_content
+
+    image = BinaryContent(data=b"png", media_type="image/png")
+    assert split_user_content("plain") == ("plain", {})
+    text, images = split_user_content(["look ", image, " and ", image])
+    assert text == "look [Image #1]  and [Image #2] "
+    assert images == {1: image, 2: image}
+
+
+def test_user_message_indices_match_flatten_history():
+    from pydantic_ai.messages import (
+        ModelRequest,
+        ModelResponse,
+        SystemPromptPart,
+        TextPart,
+        UserPromptPart,
+    )
+
+    from oi.core.message_utils import user_message_indices
+
+    messages = [
+        ModelRequest(parts=[SystemPromptPart("s"), UserPromptPart("a")]),
+        ModelResponse(parts=[TextPart(content="x")]),
+        ModelRequest(parts=[UserPromptPart("")]),
+        ModelRequest(parts=[UserPromptPart("b")]),
+    ]
+    assert user_message_indices(messages) == [0, 3]
+    assert user_message_indices([]) == []

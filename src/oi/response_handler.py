@@ -129,7 +129,7 @@ class ResponseHandler:
                 from_code="anthropic_caller" in (part.provider_details or {}),
             )
             self._native_calls[index] = call
-            self._announce_native_call(call, _coerce_args(part.args))
+            self._announce_native_call(call, coerce_tool_args(part.args))
         elif isinstance(part, NativeToolReturnPart):
             self.renderer.render_native_tool_return(
                 part.tool_call_id, part.tool_name, part.content
@@ -181,7 +181,7 @@ class ResponseHandler:
             # if the delta accumulation never produced a parseable dict.
             call = self._native_calls.pop(index, None)
             if call is not None:
-                args = _coerce_args(part.args)
+                args = coerce_tool_args(part.args)
                 if args is not None:
                     self._announce_native_call(call, args)
 
@@ -243,7 +243,7 @@ class ResponseHandler:
         )
 
 
-def _coerce_args(args: str | dict[str, Any] | None) -> Optional[dict[str, Any]]:
+def coerce_tool_args(args: str | dict[str, Any] | None) -> Optional[dict[str, Any]]:
     """Normalize part args (dict, JSON string, or None) to a dict or None."""
     if isinstance(args, dict):
         return args

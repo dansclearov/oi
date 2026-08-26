@@ -15,7 +15,9 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
   on partway through a chat.
 - Optional full-screen TUI mode (`--tui`, or `"tui": true` in `config.json`;
   `--no-tui` opts back out for one run) that renders responses as
-  live-streamed markdown.
+  live-streamed markdown. In the TUI, `↑` on an empty prompt walks back through
+  your messages: edit one to branch the conversation from there, and switch
+  between branches later — the old one is kept, never lost.
 - Paste images with `Alt+V` (`Ctrl+V` on Mac) on vision-capable models.
 - User config in `~/.config/oi/` merges with built-in defaults.
 

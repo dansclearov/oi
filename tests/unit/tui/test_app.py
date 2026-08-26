@@ -10,7 +10,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from textual.events import Key
-from textual.widgets import Markdown
+from textual.widgets import Markdown, Static
 from textual.widgets._markdown import MarkdownTable, MarkdownTableContent
 
 from oi.app import ChatLoopContext
@@ -18,7 +18,15 @@ from oi.config.settings import Config, load_user_config
 from oi.core.chat_manager import ChatManager
 from oi.core.client import InterruptedTurn
 from oi.llm_types import ChatOptions, ModelCapabilities
-from oi.tui.app import MAX_INPUT_HEIGHT, ChatInput, ChatLog, OiApp, ResponseView
+from oi.tui.app import (
+    EDIT_HINT,
+    HISTORY_HINT,
+    MAX_INPUT_HEIGHT,
+    ChatInput,
+    ChatLog,
+    OiApp,
+    ResponseView,
+)
 from oi.tui.slash_menu import SlashMenu
 from oi.tui.vim import Mode as VimMode
 from oi.tui.renderer import ResponseStarted, TextDelta, ThinkingDelta, TuiRenderer
@@ -221,7 +229,7 @@ def test_input_is_never_empty_before_the_echoed_row_exists(tmp_path):
                 echoed = any(
                     "hello there" in str(widget.render())
                     for widget in screen._compositor.visible_widgets
-                    if widget.has_class("content")
+                    if widget.has_class("message")
                 )
                 painted.append((chat_input.text == "", echoed))
 
@@ -256,7 +264,7 @@ def test_the_turn_starts_only_once_the_message_is_on_screen(tmp_path):
                 any(
                     "hello there" in str(widget.render())
                     for widget in app.screen._compositor.visible_widgets
-                    if widget.has_class("content")
+                    if widget.has_class("message")
                 )
             )
             return ModelResponse(parts=[TextPart(content="ok")])
@@ -782,7 +790,7 @@ def test_image_markers_render_as_colored_pills(tmp_path):
             await pilot.pause()
             await app.workers.wait_for_complete()
 
-            echoed = app.query("Static.content").last(Static)
+            echoed = app.query("Static.message").last(Static)
             assert pill_style(echoed.render_line(0)).color.number == 6
 
     asyncio.run(scenario())
@@ -877,7 +885,7 @@ def test_interrupt_before_output_unsends_the_message(tmp_path):
 
             # The message came back for review: echoed row gone, input refilled.
             assert not list(app.query(".interrupted"))
-            assert not list(app.query("Static.content"))
+            assert not list(app.query("Static.message"))
             assert chat_input.text == "hello wrold"
 
         assert chat.messages == []  # pending user message discarded
@@ -1225,3 +1233,410 @@ def test_wrapper_code_collapses_into_the_web_line(tmp_path):
         ]
 
     asyncio.run(_run_search_turn(tmp_path, stream)(check))
+
+
+def _user_texts(app) -> list[str]:
+    from textual.widgets import Static
+
+    texts = []
+    for row in app._user_rows:
+        text = str(row.query_one(".message", Static).content)
+        badges = list(row.query(".badge"))
+        if badges:
+            text += "\n" + str(badges[0].content)
+        texts.append(text)
+    return texts
+
+
+def _history_texts(chat) -> list[str]:
+    from oi.core.message_utils import flatten_history
+
+    return [content for _, content in flatten_history(chat.messages)]
+
+
+def _hint(app) -> str:
+    from textual.widgets import Static
+
+    return str(app.query_one("#hint", Static).content)
+
+
+def test_up_on_an_empty_input_walks_the_user_messages(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        _fill_history(chat, turns=3)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one(ChatInput)
+            await pilot.press("up")
+            assert app._history_index == 2
+            assert app._user_rows[2].has_class("selected")
+            assert _hint(app) == HISTORY_HINT
+            await pilot.press("up", "up", "up")
+            assert app._history_index == 0  # clamps at the oldest
+            await pilot.press("down", "down", "down")
+            # Past the newest message is the prompt again.
+            assert app._history_index is None
+            assert not chat_input.history_mode
+            assert not any(row.has_class("selected") for row in app._user_rows)
+            assert _hint(app) == ""
+
+            # Typing leaves history mode and the key is not swallowed.
+            await pilot.press("up", "x")
+            assert app._history_index is None
+            assert chat_input.text == "x"
+
+    asyncio.run(scenario())
+
+
+def test_editing_a_message_starts_a_new_branch(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        _fill_history(chat, turns=2)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one("#input", ChatInput)
+            await pilot.press("up", "up", "enter")
+            editor = app._inline_editor
+            assert editor is not None and editor.text == "question 0"
+            assert editor.parent is app._user_rows[0].query_one(".content")
+            assert app.focused is editor
+            assert chat_input.text == ""
+            assert app._edit_index == 0
+            assert _hint(app) == EDIT_HINT
+
+            editor.insert(" edited")
+            await pilot.press("enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.pause()
+
+            assert _history_texts(chat) == ["question 0 edited", RESPONSE_MD]
+            assert len(chat.branches) == 1 and chat.branches[0].at == 0
+            assert _user_texts(app) == ["question 0 edited\n‹ 2/2 ›"]
+            assert len(app.query(ResponseView)) == 1
+
+            # ←/→ on the forked message walk its alternatives.
+            await pilot.press("up", "left")
+            await pilot.pause()
+            assert _history_texts(chat)[:2] == [
+                "question 0",
+                "An answer.\n\n- one\n- two\n",
+            ]
+            assert len(chat.messages) == 4
+            assert _user_texts(app) == ["question 0\n‹ 1/2 ›", "question 1"]
+            assert app._history_index == 0
+            await pilot.press("left")  # no branch further left
+            assert _user_texts(app)[0] == "question 0\n‹ 1/2 ›"
+            await pilot.press("right")
+            await pilot.pause()
+            assert _user_texts(app) == ["question 0 edited\n‹ 2/2 ›"]
+
+        saved = ctx.chat_manager.get_last_chat()
+        assert saved is not None
+        assert _history_texts(saved) == ["question 0 edited", RESPONSE_MD]
+        assert len(saved.branches) == 1
+
+    asyncio.run(scenario())
+
+
+def test_replay_shows_thinking_and_tool_lines_in_order(tmp_path):
+    from pydantic_ai.messages import (
+        NativeToolCallPart,
+        NativeToolReturnPart,
+        ThinkingPart,
+    )
+
+    def stored(chat):
+        chat.messages.append(ModelRequest(parts=[UserPromptPart(content="q")]))
+        chat.messages.append(
+            ModelResponse(
+                parts=[
+                    ThinkingPart(content="first thought"),
+                    NativeToolCallPart(
+                        tool_name="web_search",
+                        args={"query": "oi chat"},
+                        tool_call_id="c1",
+                    ),
+                    NativeToolReturnPart(
+                        tool_name="web_search",
+                        content=[{"url": "a"}, {"url": "b"}],
+                        tool_call_id="c1",
+                    ),
+                    TextPart(content="answer"),
+                    ThinkingPart(content="second thought"),
+                ],
+                state="interrupted",
+            )
+        )
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        stored(chat)
+        async with app.run_test():
+            log = app.query_one(ChatLog)
+            rows = [child for child in log.children if child.has_class("row")]
+            blocks = [child for child in log.children if child.has_class("tool-block")]
+            # user row, thinking segment, tool block, then the text segment.
+            assert [str(c.content) for c in app.query(".thinking")] == [
+                "first thought",
+                "second thought",
+            ]
+            assert len(blocks) == 1
+            tool_text = str(blocks[0].query_one(".tool-line", Static).content)
+            assert 'Web Search("oi chat")' in tool_text and "2 results" in tool_text
+            order = [
+                "tool" if c.has_class("tool-block") else "row" for c in log.children
+            ]
+            assert order[-4:] == ["row", "row", "tool", "row"]
+            views = list(app.query(ResponseView))
+            assert len(views) == 2 and len(rows) == 3
+            assert list(app.query(".interrupted"))
+
+        app, chat, ctx = _make_app(
+            tmp_path, chat_options=ChatOptions(show_thinking=False)
+        )
+        stored(chat)
+        async with app.run_test():
+            assert not list(app.query(".thinking"))
+            assert len(app.query(Markdown)) == 1
+
+    asyncio.run(scenario())
+
+
+def test_cancelling_an_edit_leaves_the_branch_alone(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        _fill_history(chat, turns=2)
+        async with app.run_test() as pilot:
+            chat_input = app.query_one("#input", ChatInput)
+            await pilot.press("up", "enter")
+            editor = app._inline_editor
+            assert editor is not None and editor.text == "question 1"
+            row = app._user_rows[1]
+            assert not row.query_one(".message").display
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app._inline_editor is None and app._edit_index is None
+            assert row.query_one(".message").display
+            assert not list(row.query(ChatInput))
+            assert app.focused is chat_input
+            assert _hint(app) == ""
+            assert len(chat.messages) == 4 and chat.branches == []
+
+            # Sending from the compose box abandons an edit in progress.
+            await pilot.press("up", "enter")
+            assert app._inline_editor is not None
+            chat_input.focus()
+            chat_input.insert("fresh question")
+            await pilot.press("enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert app._inline_editor is None
+            assert _user_texts(app) == ["question 0", "question 1", "fresh question"]
+            assert len(chat.messages) == 6 and chat.branches == []
+
+    asyncio.run(scenario())
+
+
+def test_unsending_a_forked_message_brings_the_branch_back(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        _fill_history(chat, turns=2)
+        started = asyncio.Event()
+        ctx.llm_client.chat_async = _hanging_chat_async(
+            ctx,
+            started,
+            interrupt=InterruptedTurn(partial_response=None, saw_output=False),
+        )
+        async with app.run_test() as pilot:
+            chat_input = app.query_one("#input", ChatInput)
+            await pilot.press("up", "up", "enter")
+            app._inline_editor.insert(" edited")
+            await pilot.press("enter")
+            await asyncio.wait_for(started.wait(), timeout=5)
+            await pilot.pause()
+            assert _user_texts(app) == ["question 0 edited"]
+            assert app._inline_editor is None
+
+            await pilot.press("ctrl+c")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.pause()
+
+            # The old branch is back, with the edit reopened on its message.
+            assert chat_input.text == ""
+            editor = app._inline_editor
+            assert editor is not None and editor.text == "question 0 edited"
+            assert editor.parent is app._user_rows[0].query_one(".content")
+            assert app._edit_index == 0  # sending again forks here again
+            assert _user_texts(app) == ["question 0", "question 1"]
+            assert len(app.query(ResponseView)) == 2
+
+        assert len(chat.messages) == 4
+        assert chat.branches == []
+
+    asyncio.run(scenario())
+
+
+def test_switching_to_a_longer_branch_keeps_the_message_in_view(tmp_path):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        _fill_history(chat, turns=20)
+        async with app.run_test() as pilot:
+            log = app.query_one(ChatLog)
+            await pilot.press("up", *["up"] * 19, "enter")  # oldest message
+            app._inline_editor.insert(" edited")
+            await pilot.press("enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert len(app._user_rows) == 1
+
+            await pilot.press("up", "left")  # back to the 20-turn branch
+            await pilot.pause()
+            await pilot.pause()
+            assert len(app._user_rows) == 20
+            selected = app._user_rows[0]
+            assert log.scroll_y < log.max_scroll_y
+            assert selected.region.y >= log.region.y  # the top message shows
+            assert selected.region.y < log.region.y + log.size.height
+
+    asyncio.run(scenario())
+
+
+def test_inline_editor_taller_than_the_log_never_scrolls_itself(tmp_path):
+    long_message = "\n".join(f"line {i}" for i in range(60))
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        chat.messages.append(ModelRequest(parts=[UserPromptPart(content=long_message)]))
+        chat.messages.append(ModelResponse(parts=[TextPart(content="An answer.")]))
+        async with app.run_test(size=(80, 24)) as pilot:
+            log = app.query_one(ChatLog)
+            await pilot.press("up", "enter")
+            await pilot.pause()
+            await pilot.pause()
+            editor = app._inline_editor
+            assert editor is not None
+            assert editor.size.height == 60  # sized to the text, no cap
+            assert editor.scroll_y == 0  # the log scrolls, not the editor
+            assert editor.caret_on_screen()
+            assert app._cursor_visible
+            # The caret (on the last line) is in view, and the answer below
+            # is still reachable.
+            assert log.scroll_y < log.max_scroll_y
+            log.scroll_end(animate=False, immediate=True)
+            await pilot.pause()
+            assert editor.scroll_y == 0
+
+            # Scrolling the caret off-screen hides the terminal cursor.
+            log.scroll_home(animate=False, immediate=True)
+            await pilot.pause()
+            assert not editor.caret_on_screen()
+            assert not app._cursor_visible
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app._cursor_visible
+
+    asyncio.run(scenario())
+
+
+def test_inline_editor_cursor_tracks_a_wrapped_caret_and_log_scrolls(tmp_path):
+    # One paragraph that wraps into ~50 rows at 78 columns: the caret's
+    # cached offset is measured before the editor has its real width.
+    paragraph = " ".join(f"word{i}" for i in range(500))
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        chat.messages.append(ModelRequest(parts=[UserPromptPart(content=paragraph)]))
+        chat.messages.append(ModelResponse(parts=[TextPart(content="An answer.")]))
+        async with app.run_test(size=(80, 24)) as pilot:
+            log = app.query_one(ChatLog)
+            await pilot.press("up", "enter")
+            await pilot.pause()
+            await pilot.pause()
+            editor = app._inline_editor
+            assert editor is not None
+            assert editor.size.height == editor.wrapped_document.height > 20
+            # The caret is on the last wrapped row, that row is in view, and
+            # the terminal cursor is exactly there.
+            caret = editor._caret_offset()
+            assert caret.y == editor.region.y + editor.size.height - 1
+            assert log.content_region.contains_point(caret)
+            assert app.cursor_position == caret
+            assert app._cursor_visible
+
+            # The log scrolling under the editor re-points the cursor.
+            log.scroll_home(animate=False, immediate=True)
+            await pilot.pause()
+            await pilot.pause()
+            assert not app._cursor_visible
+            editor.move_cursor((0, 0))
+            await pilot.pause()
+            await pilot.pause()
+            assert app._cursor_visible
+            assert app.cursor_position == editor._caret_offset()
+            assert log.content_region.contains_point(app.cursor_position)
+
+    asyncio.run(scenario())
+
+
+def test_inline_editor_reveals_the_whole_wrapped_line_at_once(tmp_path):
+    # 30 short lines, then one paragraph wrapping to a few rows.
+    text = (
+        "\n".join(f"line {i}" for i in range(30))
+        + "\n"
+        + " ".join(f"word{i}" for i in range(40))
+    )
+
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        chat.messages.append(ModelRequest(parts=[UserPromptPart(content=text)]))
+        chat.messages.append(ModelResponse(parts=[TextPart(content="An answer.")]))
+        async with app.run_test(size=(80, 24)) as pilot:
+            log = app.query_one(ChatLog)
+            await pilot.press("up", "enter")
+            await pilot.pause()
+            editor = app._inline_editor
+            assert editor is not None
+            first, last = editor._caret_rows()
+            assert last - first >= 2  # the paragraph really wraps
+
+            # Vim-style: land at the *start* of the wrapped logical line.
+            log.scroll_home(animate=False, immediate=True)
+            await pilot.pause()
+            editor.move_cursor((30, 0))
+            # Right away, before any layout pass: the terminal cursor is
+            # where the caret will be painted — no wrong frame in between.
+            assert app.cursor_position == editor._caret_offset()
+            assert log.content_region.contains_point(app.cursor_position)
+            await pilot.pause()
+            await pilot.pause()
+            # ...and the paragraph's last wrapped row is on screen too.
+            bottom = editor._caret_offset().y + (last - first)
+            assert log.content_region.contains_point((2, bottom))
+            assert app.cursor_position == editor._caret_offset()
+
+    asyncio.run(scenario())
+
+
+def test_a_short_conversation_starts_at_the_top_and_a_long_one_hugs_the_input(
+    tmp_path,
+):
+    async def scenario():
+        app, chat, ctx = _make_app(tmp_path)
+        _fill_history(chat, turns=1)
+        async with app.run_test(size=(80, 24)):
+            log = app.query_one(ChatLog)
+            header = app.query_one("#header")
+            assert header.region.y == log.content_region.y
+            assert app._user_rows[0].region.y < log.content_region.bottom - 5
+
+        app, chat, ctx = _make_app(tmp_path)
+        _fill_history(chat, turns=20)
+        async with app.run_test(size=(80, 24)):
+            log = app.query_one(ChatLog)
+            last = list(app.query(ResponseView))[-1]
+            # Bottom-anchored: the last row (plus its 1-line margin) ends at
+            # the pane's bottom edge.
+            assert last.region.bottom + 1 == log.content_region.bottom
+            assert log.scroll_y == log.max_scroll_y
+
+    asyncio.run(scenario())

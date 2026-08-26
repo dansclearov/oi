@@ -9,8 +9,23 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- TUI: conversation branching. `↑` on an empty prompt walks back through your
+  messages (`↓` returns to the prompt); `Enter` edits one in place and
+  sending it starts a new branch from that point, while the old branch is kept
+  and `←`/`→` on that message switch between them (a dim `‹ 2/3 ›` marks
+  messages with alternatives). Vim mode adds `h`/`j`/`k`/`l`. Dormant branches
+  are stored in `branches.json` next to `messages.json`, which stays the
+  active branch, so everything else (`-c`, search, stats, older versions) sees
+  the conversation as before.
+
 ### Changed
 
+- TUI: reopening a chat replays thinking traces and native tool lines (web
+  search / fetch / code) in their original order, not just the answer text.
+- TUI: a conversation shorter than the screen starts at the top and grows
+  downward instead of hugging the input.
 - Interrupting a streaming reply (`Ctrl+C` / `Esc`) now keeps the exchange in
   the chat, Claude-Code-style: the partial answer stays in context, so a
   follow-up can steer the model instead of starting the turn over. Interrupting

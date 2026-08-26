@@ -381,8 +381,10 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   stays plain grey-italic text (a `Static`, not markdown). The log is a
   fixed-height (`1fr`) `VerticalScroll` with `anchor()`: v8's compositor
   bottom-aligns anchored content even when it's shorter than the container
-  (negative scroll), so the conversation hugs the input chat-app-style —
-  deliberate; user scroll releases the anchor.
+  (negative `scroll_y`), which would make a short conversation hug the
+  input; `ChatLog.scroll_offset` clamps that at 0 so a chat starts at the
+  top and grows downward CC-style, and only once it fills the pane does the
+  anchor hold it to the bottom. User scroll releases the anchor.
 - **Slash commands**: executed in `_handle_local_command` (`/btw` streams a
   side answer in the turn worker under the hollow `○` marker — nothing
   appended or saved; `/bookmark` mirrors the CLI; `/vim` toggles vim mode).
@@ -538,6 +540,79 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   (`ResponseHandler._handle_part`), never per delta: a delta can end inside a
   heading (`## Sp`). `join_text_parts` is the same rule for replay
   (`flatten_history`, `response_text`), since the stored parts keep the glue.
+
+**Conversation Branches (TUI-only UI, `core/session.py:Branch`):**
+- Tree semantics with no visible tree: `Chat.messages` stays the *active*
+  linear path and is all that `messages.json` holds, so the model, replay,
+  selector search, stats, headless `-c` and older oi versions are untouched.
+  Dormant alternatives live in `Chat.branches` / `branches.json` as
+  `Branch(at, tail, branches)`: `tail` replaces `messages[at:]` (`at` is
+  always a user request), and a branch's own `branches` index the path it
+  would form once active — recursive, so no message IDs are needed.
+- `fork_at(index, content)` parks `messages[index:]` (plus the dormant forks
+  hanging off it, `at > index`) as one `Branch`, truncates, carries a
+  system prompt on the displaced message over, appends the new one, and
+  returns the displaced branch. `switch_to(branch)` swaps tails the same way;
+  an empty outgoing tail (a fork whose turn produced nothing) is simply not
+  parked, which is how an unsent/failed fork restores the old branch with no
+  trace. Siblings at an index are ordered by the user prompt's timestamp
+  (`user_timestamp`), active one included (`siblings_at` marks it `None`).
+- TUI: `↑` on an empty input (or `k` in vim normal mode) enters history mode
+  — `ChatInput` flips `history_mode` synchronously with the key (same reason
+  Esc is resolved there) and only when `history_available` (rows exist, no
+  turn streaming; the app keeps it current). Keys post
+  `ChatInput.HistoryKey`: ↑/↓ (`k`/`j`) move the `.selected` highlight over
+  `_user_rows`, ↓ past the newest exits shell-style, ←/→ (`h`/`l`) call
+  `switch_to` and re-mount the log from that message, Enter edits the
+  message **in place** (`_open_inline_editor`: a second `ChatInput(inline=True)`
+  mounted in the row's content column over the hidden `.message` Static, so
+  its wrap matches; `split_user_content` turns image parts back into live
+  `[Image #N]` pills) and sets `_edit_index`/`_inline_editor`; any other key
+  exits and is handled normally. The inline editor has no height cap, never
+  calls `preempt_resize`/the pending-resize cursor correction (its top doesn't
+  move), and scrolls the *log* to its caret (`reveal_cursor`, since a TextArea
+  only scrolls itself). The caret is measured by `_caret_offset`, not
+  `cursor_screen_offset`: TextArea caches the caret's wrapped offset and
+  refreshes it only on cursor moves, so after the editor re-wraps at its real
+  width it is stale until the next keystroke — and it reads the editor's
+  screen `region`, which the compositor moves only a frame after a log
+  scroll (a visible wrong-row flash on every `j`). `_caret_offset` instead
+  sums the layout-stable `virtual_region`s up to the log and subtracts the
+  log's *live* scroll (non-animated scrolls apply immediately), so it is
+  right the moment `reveal_cursor` has scrolled. `reveal_cursor` reveals the
+  caret's whole logical line when it fits (a vim `j`/`G` lands on a wrapped
+  line's first row; ↓ moves by visual rows and never had the problem).
+  `scroll_cursor_visible` is overridden to zero the internal scroll it takes
+  (a scroll taken while the widget is still its pre-growth height sticks and
+  cuts off the last lines) and reveal via the log instead.
+  Textual places the hardware cursor at the caret's screen offset clamped to
+  the screen, so with the caret scrolled out of the log it lands on the
+  compose box's border, and the log scrolling under the editor moves the
+  caret without the editor hearing about it: `_sync_cursor_visibility` hides
+  it (`?25l`) while `caret_on_screen()` is false and re-points it otherwise,
+  after each refresh on `ChatLog.Scrolled` / `ChatInput.CaretMoved`
+  (pre-refresh geometry is stale). History mode leaves the anchor off while
+  the editor is open.
+  Esc cancels (it rides the `interrupt` `MenuKey`, which is a no-op with
+  nothing streaming), as does sending from the compose box. Submit from the
+  editor (`Submitted.input.inline`, never parsed as a command) unmounts the
+  rows from that message — editor included — inside the same `batch_update`
+  as the echoed row, and `_run_turn` calls `fork_at` instead of
+  `append_user_message`; a turn that ends with nothing (unsend, request
+  error) carries the displaced branch back on `TurnFinished.restore`, which
+  re-mounts it and reopens the inline editor on it with the submitted text,
+  so re-sending forks again. `OiApp._input` is the compose box (`#input`);
+  never `query_one(ChatInput)` — there can be two.
+- `_user_rows` is aligned with `user_message_indices(chat.messages)` — the
+  live turn's row is appended at submit and popped on unsend/failure; `/btw`
+  echoes are never in it. A user row is `_user_row`: marker + a `.content`
+  column holding the `.message` Static and, when the message has siblings, a
+  `.badge` Static (`‹ 2/3 ›`, `BADGE_STYLE`) on its own line — a separate
+  widget so the history highlight (`.selected`, painted on the marker and
+  `.message` only) leaves it out. `_set_badge` refreshes the last row after
+  each turn; switching re-mounts the affected rows so theirs come from
+  `_mount_history`.
+- The scrollback CLI has no branch UI (it only ever sees the active path).
 
 **Interrupted Turns (Ctrl+C / Esc mid-stream):**
 - The split is on *visible output at the moment of interrupt*

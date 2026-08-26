@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Iterable, Optional, Sequence
 
 # pydantic_ai imports are function-local: its package __init__ costs ~600ms,
 # which would otherwise land on every startup before the first prompt paints.
 if TYPE_CHECKING:
-    from pydantic_ai.messages import ModelMessage, ModelResponse
+    from pydantic_ai.messages import BinaryContent, ModelMessage, ModelResponse
 
 
 # A completed ATX heading at the very end of a text block. `\Z` (not `$`) so a
@@ -217,6 +218,58 @@ def flatten_history(
                 history.append(("assistant", text))
 
     return history
+
+
+def user_message_indices(messages: Sequence[ModelMessage]) -> list[int]:
+    """Indices of the messages `flatten_history` shows as user turns."""
+    indices: list[int] = []
+    if not messages:
+        return indices
+
+    from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+    for index, message in enumerate(messages):
+        if isinstance(message, ModelRequest) and any(
+            isinstance(part, UserPromptPart) and part.content for part in message.parts
+        ):
+            indices.append(index)
+    return indices
+
+
+def user_timestamp(message: ModelMessage) -> datetime:
+    """When the user prompt in `message` was written."""
+    from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+    assert isinstance(message, ModelRequest)
+    for part in message.parts:
+        if isinstance(part, UserPromptPart):
+            return part.timestamp
+    raise ValueError("message carries no user prompt")
+
+
+def split_user_content(
+    content: object,
+) -> tuple[str, dict[int, BinaryContent]]:
+    """Take a user prompt apart into editable text plus its images.
+
+    The inverse of the TUI's submit: images become `[Image #N] ` markers in
+    the text, keyed by N in the returned map, so the message can be loaded
+    back into the input with its pills live.
+    """
+    if isinstance(content, str):
+        return content, {}
+
+    from pydantic_ai.messages import BinaryContent
+
+    text = ""
+    images: dict[int, BinaryContent] = {}
+    for part in content:  # type: ignore[attr-defined]
+        if isinstance(part, BinaryContent):
+            images[len(images) + 1] = part
+            text += f"[Image #{len(images)}] "
+        else:
+            text += str(part)
+    return text, images
 
 
 def latest_system_prompt(messages: Sequence[ModelMessage]) -> Optional[str]:
