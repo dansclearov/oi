@@ -9,6 +9,32 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The TUI is now the default interface. `--no-tui` runs the classic
+  scrollback UI for one run; `"tui": false` in `config.json` makes it the
+  default again (`--tui` still overrides that per run).
+- `demo.gif` is recorded from a real terminal now (`demo/record.sh` driving
+  the TUI with `demo/tui_demo.py`), replacing the VHS tape: VHS's headless
+  terminal has no kitty graphics, so it could never show the math rendering.
+
+### Fixed
+
+- The built-in `concise` prompt no longer misspells "concise".
+
+### Added
+
+- TUI: LaTeX math rendering. `$…$`, `\(…\)` inline and `$$…$$`, `\[…\]`,
+  `\begin{align}…` display math are typeset (Computer Modern) and shown
+  inline as kitty-graphics images sized to the terminal cell, in the terminal's
+  foreground color, on the text baseline — in kitty, Ghostty, WezTerm and other
+  terminals with the kitty graphics protocol. `align`/`gather`, `pmatrix` &
+  friends, `cases` and `array` are laid out on top of matplotlib's mathtext.
+  Requires the `latex` extra (`oi-chat[latex]`, i.e. matplotlib); without it,
+  or in other terminals, the LaTeX source is shown as before.
+  A ```` ```latex ```` / ```` ```tex ```` / ```` ```math ```` code block whose
+  content renders is shown as display math too.
+
 ## [0.2.3] - 2026-08-27
 
 ### Added

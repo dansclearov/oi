@@ -47,6 +47,7 @@ uv add <package-name>     # Add a new dependency
 # Global installation
 pipx install -e .         # Install from local copy
 pipx install --force -e . # Reinstall after changes
+uv tool install --force -e ".[latex]"  # editable + the LaTeX extra (matplotlib), TUI math rendering needs it
 ```
 
 **Running the application:**
@@ -94,6 +95,21 @@ Keep notable changes under `CHANGELOG.md`'s `[Unreleased]` as you go: the releas
 job extracts the per-version section, so it must exist before tagging. Pre-1.0,
 bump the **minor** for breaking changes (CLI flags, config/`models.yaml` format,
 alias names) and the **patch** for features and fixes.
+
+## Demo GIF
+
+`demo.gif` (shown in the README) is recorded from a real terminal by
+`demo/record.sh`: a fullscreen Ghostty window runs `demo/tui_demo.py`, which
+starts `oi` through the real `main()` (`--tui --ephemeral -P concise`) with
+`OiApp` swapped for a subclass whose worker types the scripted prompts into
+the compose box and submits them; `gpu-screen-recorder` captures the monitor
+(fullscreen because a window's screen position isn't discoverable on KDE
+Wayland; CPU encoding, no vaapi here) and ffmpeg makes the GIF. It replaced
+the VHS tape because VHS's headless terminal has no kitty graphics, so it
+can't show the math rendering. Driver gotchas: its `on_mount` must not call
+`super()` (Textual runs one handler per class in the MRO) and its worker
+needs its own `group` — the turn worker is `exclusive=True` in the default
+group and would cancel it.
 
 ## Architecture Overview (Post-Refactoring)
 
@@ -266,13 +282,14 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
 - **Exhaustion → auto-fallback + auto-revert**: the Codex backend returns `x-codex-{primary,secondary}-used-percent` / `-reset-at` headers on every response (primary ~5h, secondary ~7d window; exhausted == used-percent 100). A `response` hook (`record_rate_limit_headers`) snapshots them; `is_exhausted()` is true while a window is maxed before its `reset_at`. While exhausted, routing uses the API key; if a turn hits the limit mid-request, `_stream_with_fallback` retries that turn on the API key in-place (gated on `is_exhausted()` set by the hook — never error-body guessing). After `reset_at` it auto-returns to the subscription; both transitions print a one-line notice.
 - **Billing indicator**: `app._billing_tag()` shows ` (sub)`/` (api)` on the chat-start banner — `(sub)` only when actually billing to the subscription, `(api)` otherwise (including non-subscription providers).
 
-**TUI Mode (`src/oi/tui/`, off by default):**
-- Enabled per run with `--tui` or persistently via `"tui": true` in
-  `config.json` (`Config.tui`) — the `/tui` slash command writes that key from
-  either frontend, so it applies on the next launch, not mid-session (unlike
-  `/vim`, which also takes effect immediately). `--tui`/`--no-tui` are paired
-  flags over one dest defaulting to `None`, so "unset" stays distinguishable
-  from "off" and only then does `config.json` decide. `main()` branches to
+**TUI Mode (`src/oi/tui/`, the default):**
+- On unless `"tui": false` in `config.json` (`Config.tui`, default `True`) or
+  `--no-tui` for a run; `--tui` overrides a `false` config for a run. The
+  `/tui` slash command writes that key from either frontend, so it applies on
+  the next launch, not mid-session (unlike `/vim`, which also takes effect
+  immediately). `--tui`/`--no-tui` are paired flags over one dest defaulting
+  to `None`, so "unset" stays distinguishable from "off" and only then does
+  `config.json` decide. `main()` branches to
   `tui.app:run_tui` for the interactive chat path only — headless (`-p`), `stats`, `docs`, `auth`, and
   the pre-launch chat selector are unchanged. The import is deferred so the
   scrollback path never pays for textual.
@@ -481,6 +498,64 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   steady block (`2 q`) otherwise, `0 q` reset on exit. Writes go through
   `_write_terminal`, which no-ops headless — screenshots/tests show no
   cursor, that's expected.
+- **LaTeX math** (`tui/latex.py` + `tui/markdown.py`, optional `latex`
+  extra = matplotlib): `OiMarkdown` replaces Textual's `Markdown` in the TUI
+  (streamed and replayed responses). Its parser adds `mdit_py_plugins`
+  dollarmath (`allow_digits=False`, so `$5 and $6` stays text), texmath
+  (`\(…\)`/`\[…\]`) and amsmath (top-level `\begin{align}`). Formulas are
+  rasterized by matplotlib's mathtext (Computer Modern, no TeX install) at
+  4× and downsampled to an image whose pixel size is an exact multiple of
+  the cell, so the terminal never resamples, in the terminal's foreground
+  color (OSC 10 query) on transparent. They are transmitted with the kitty
+  graphics protocol as **virtual placements** (`U=1`) and shown through
+  Unicode placeholder cells (U+10EEEE + row/column diacritics, image id in
+  the cell's fg color) — so an inline formula is just a run of styled text
+  inside the paragraph's `Content`, on the text baseline (one cell row;
+  taller content borrows baseline shift, then scales, floor
+  `MIN_INLINE_SCALE`), and display math is a `MarkdownMath` block of
+  placeholder lines that re-renders scaled-to-fit on resize. Images are
+  cached per (tex, display, width cap), so streaming re-parses never
+  re-transmit. `probe_terminal()` runs in `run_tui` **before** Textual takes
+  the tty (support query + cell size ioctl + fg color, gated on a cheap
+  `$TERM`/env hint so other terminals pay no timeouts); unsupported/missing
+  dep/unrenderable → `render()` returns `None` and the source is shown.
+  mathtext has no environments and treats everything as inline, so
+  `latex.py` layers on it: alias rewrites for what it lacks (`_ALIASES`:
+  `\le`, `\tfrac`, `\big(`, `\bmod`, `\boxed`…), `\frac`→`\dfrac` at top
+  level in display mode, inline text-style substitutes (`\frac`→case
+  fraction `{}^{a}/{}_{b}`, `\sum`→`{\Sigma}` etc. with side limits — a
+  stacked fraction or display operator is 1.5 cells tall), and its
+  own box layout (`_Rasterizer`: `\\` rows with `&` alignment, grids with
+  delimiters scaled to the grid height, `\left( env \right)` folded into the
+  env). Inline math in *every* block type works because `OiMarkdown.BLOCKS`
+  wraps each block class with `MathInlineMixin` — with the original class as
+  the **first** base: Textual inherits `DEFAULT_CSS` along the first base
+  only (`_css_bases`), so mixin-first silently drops the block's margins.
+  Two parser fixes in `make_parser` for how models actually write: the
+  math block rules get `alt` (so `Text:\n$$…$$` with no blank line
+  interrupts the paragraph like a fence does — dollarmath registers none,
+  leaving that `$$` line as tiny inline math), wrapped by `_probe_safe`
+  because dollarmath ignores `silent` and emits tokens during the terminator
+  probe; and an unterminated `$$` opens a block to the end of the input
+  (`_open_dollar_block`, `meta["open"]`, shown as source), the way an
+  unclosed fence does — Textual's streaming `append` freezes every block
+  before the last, so a paragraph glued to a still-open `$$` would otherwise
+  never be re-parsed once the block closes.
+  Models asked for "math in LaTeX" often answer with the source in
+  ```` ```latex ```` fences; `MathMarkdownIt.parse` turns a *closed*
+  `latex`/`tex`/`math` fence into a `math_block` when its content renders
+  (an open one mid-stream, or an unrenderable one, stays a code block).
+  There is deliberately no hidden request-time hint telling the model that
+  math renders — the chat stays exactly what the user and model wrote;
+  formatting is applied to the output only.
+  Tests run headless with a recording sender. To check the real look (cell
+  metrics, baseline, size vs the font), the loop is: launch a Ghostty window
+  running a Textual app (`ghostty --title=x -e uv run python demo.py &`),
+  `spectacle -b -n -f -o shot.png` from this session, read the PNG, and
+  `pkill -f "^ghostty --title=x"` (anchored — an unanchored `-f` pattern
+  matches the shell that launched it). `probe_terminal()` there reported
+  10×21 px cells; `EM_FACTOR`/`BASELINE_FACTOR`/`INLINE_OVERHANG` were tuned
+  against that.
 - Gotchas: don't name `OiApp` attributes `_registry` or `_log` (Textual
   App/DOMNode internals). Textual is pinned `>=8.2.8,<9` (fast-moving
   majors). `OiApp.__init__` sets `_disable_tooltips` (Textual private, also

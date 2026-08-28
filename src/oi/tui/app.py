@@ -20,9 +20,8 @@ from typing import TYPE_CHECKING, Optional, Sequence, Union, cast
 # which would otherwise delay the first paint. `main()` pre-imports it on a
 # background thread while the app mounts.
 if TYPE_CHECKING:
-    from textual.document._document import Document
-
     from pydantic_ai.messages import BinaryContent, ModelResponse, UserContent
+    from textual.document._document import Document
 
     UserContentInput = Union[str, Sequence[UserContent]]
 
@@ -34,12 +33,14 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.geometry import Offset, Region, Size
 from textual.message import Message
+from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Markdown, Static, TextArea
-from textual.widgets.text_area import Edit, EditResult, Selection, TextAreaTheme
-from textual.timer import Timer
 from textual.widgets._markdown import MarkdownStream
+from textual.widgets.text_area import Edit, EditResult, Selection, TextAreaTheme
 from textual.worker import Worker
+
+from oi import warmup
 
 # oi.app is fully imported before main() branches into the TUI, so importing
 # its helpers here can't create a cycle (oi.app never imports oi.tui at module
@@ -61,7 +62,6 @@ from oi.core.message_utils import (
     user_message_indices,
 )
 from oi.core.session import Branch, Chat
-from oi.response_handler import coerce_tool_args
 from oi.llm_types import ModelCapabilities
 from oi.local_commands import (
     LOCAL_COMMANDS,
@@ -71,9 +71,9 @@ from oi.local_commands import (
     parse_local_command,
 )
 from oi.registry import ModelRegistry
-from oi.tui.slash_menu import SlashMenu
-from oi.tui.vim import Mode as VimMode
-from oi.tui.vim import VimHandler
+from oi.response_handler import coerce_tool_args
+from oi.tui import latex
+from oi.tui.markdown import OiMarkdown
 from oi.tui.renderer import (
     NativeToolCall,
     NativeToolReturn,
@@ -83,6 +83,7 @@ from oi.tui.renderer import (
     ToolLine,
     TuiRenderer,
 )
+from oi.tui.slash_menu import SlashMenu
 from oi.tui.tool_lines import (
     describe_return,
     extract_web_calls,
@@ -90,7 +91,8 @@ from oi.tui.tool_lines import (
     recover_args_from_return,
     tool_line_text,
 )
-from oi import warmup
+from oi.tui.vim import Mode as VimMode
+from oi.tui.vim import VimHandler
 from oi.ui.image_paste import read_clipboard_image
 from oi.ui.labels import (
     AI_LABEL,
@@ -278,7 +280,7 @@ class ResponseView(Vertical):
     async def write_text(self, text: str) -> None:
         if self._markdown is None:
             self._thinking = None  # later thinking continues in a new block
-            self._markdown = Markdown()
+            self._markdown = OiMarkdown()
             await self.mount(self._markdown)
             self._stream = Markdown.get_stream(self._markdown)
         assert self._stream is not None
@@ -1306,7 +1308,7 @@ class OiApp(App):
             if text.strip():
                 view = await self._ensure_response_view()
                 await view.end_stream()
-                await view.mount(Markdown(text))
+                await view.mount(OiMarkdown(text))
             text = ""
             if part is None:
                 break
@@ -2057,4 +2059,9 @@ def run_tui(
     current_chat: Chat, ctx, registry: ModelRegistry, is_new_chat: bool
 ) -> None:
     """Entry point used by `main()` when the TUI knob is on."""
+    # Terminal queries need the tty before Textual takes it over.
+    metrics = latex.probe_terminal()
+    latex.configure(metrics)
+    if metrics is not None:
+        latex.warm()
     OiApp(current_chat, ctx, registry, is_new_chat).run()

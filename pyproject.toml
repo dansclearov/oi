@@ -47,6 +47,11 @@ Repository = "https://github.com/dansclearov/oi"
 Issues = "https://github.com/dansclearov/oi/issues"
 Changelog = "https://github.com/dansclearov/oi/blob/main/CHANGELOG.md"
 
+[project.optional-dependencies]
+latex = [
+    "matplotlib>=3.7",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

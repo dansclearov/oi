@@ -13,12 +13,17 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
 - Optional web search and thinking traces when the selected model supports them.
   `--search` also lets the model read a URL you give it, and `/search` turns it
   on partway through a chat.
-- Optional full-screen TUI mode (`--tui`, or `"tui": true` in `config.json`;
-  `--no-tui` opts back out for one run) that renders responses as
-  live-streamed markdown. In the TUI, `↑` on an empty prompt walks back through
-  your messages: edit one to branch the conversation from there, and switch
-  between branches later — the old one is kept, never lost.
+- Full-screen TUI (the default) that renders responses as live-streamed
+  markdown. `↑` on an empty prompt walks back through your messages: edit one
+  to branch the conversation from there, and switch between branches later —
+  the old one is kept, never lost. The classic scrollback UI is still there:
+  `--no-tui` for one run, or `"tui": false` in `config.json` (`--tui` overrides
+  that for a run).
 - Paste images with `Alt+V` (`Ctrl+V` on Mac) on vision-capable models.
+- LaTeX math in the TUI, rendered as real typeset formulas (inline and display,
+  including `align`, matrices and `cases`) in terminals that speak the kitty
+  graphics protocol (kitty, Ghostty, WezTerm). Needs the `latex` extra:
+  `uv tool install "oi-chat[latex]"`. Elsewhere the LaTeX source is shown.
 - User config in `~/.config/oi/` merges with built-in defaults.
 
 ## Install
