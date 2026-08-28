@@ -82,7 +82,7 @@ oi -P concise -m gpt
 # Continue or resume chats
 oi -c
 oi -r
-oi -r chat_20240622_143022_a1b2c3d4
+oi -r 20240622_143022_a1b2c3d4
 
 # Headless: send one message and exit
 oi -p "what's 2+2"
@@ -92,6 +92,7 @@ oi -c --ephemeral -p "probe an existing chat without dirtying it"
 
 # In-chat local commands
 /btw <question>   # one-off question with full context, not saved to the chat
+/search           # turn web search on for the rest of the chat
 /bookmark
 /vim
 /tui
@@ -102,6 +103,9 @@ oi -c --ephemeral -p "probe an existing chat without dirtying it"
 oi --search -m sonnet
 oi --no-thinking -m gpt
 oi --hide-thinking -m gpt
+
+# Classic scrollback UI instead of the TUI, for one run
+oi --no-tui
 
 # Show config/data paths
 oi --user-paths
