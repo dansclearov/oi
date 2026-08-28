@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-28
+
 ### Changed
 
 - The TUI is now the default interface. `--no-tui` runs the classic
@@ -384,7 +386,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dansclearov/oi/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/dansclearov/oi/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/dansclearov/oi/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/dansclearov/oi/compare/v0.2.0...v0.2.1
