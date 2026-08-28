@@ -110,8 +110,8 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
         "--tui",
         action="store_true",
         default=None,
-        help='Run the full-screen TUI with rendered markdown ("tui": true in '
-        "config.json makes it the default)",
+        help="Run the full-screen TUI with rendered markdown (the default; "
+        '"tui": false in config.json switches to the classic scrollback UI)',
     )
     behavior.add_argument(
         "--no-tui",
