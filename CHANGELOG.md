@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-01
+
 ### Changed
 
 - The `fable` alias now points to Claude Fable 5.1 (`claude-fable-5-1`),
@@ -391,7 +393,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/dansclearov/oi/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/dansclearov/oi/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/dansclearov/oi/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/dansclearov/oi/compare/v0.2.1...v0.2.2
