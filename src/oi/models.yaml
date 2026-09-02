@@ -6,7 +6,7 @@ aliases:
   fable: anthropic/claude-fable-5-1
   gpt: openai-responses/gpt-5.6-sol
   gemini-pro: google/gemini-3.1-pro-preview
-  gemini-flash: google/gemini-3.7-flash
+  gemini-flash: google/gemini-3.8-flash
 
 anthropic:
   claude-sonnet-5:
@@ -59,7 +59,7 @@ google:
     supports_thinking: true
     supports_search: true
     supports_vision: true
-  gemini-3.7-flash:
+  gemini-3.8-flash:
     supports_thinking: true
     supports_search: true
     supports_vision: true
