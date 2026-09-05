@@ -4,14 +4,14 @@
 # How this works:
 # - This config is MERGED with the built-in models.yaml
 # - You only need to add NEW models or OVERRIDE existing ones
-# - Built-in aliases: sonnet, haiku, opus, fable, gpt, astra, gemini-pro, gemini-flash
+# - Built-in aliases: sonnet, haiku, opus, fable, sol, terra, luna, astra, gemini-pro, gemini-flash
 # - Top-level keys starting with _ are ignored (use for YAML anchors or to disable providers)
 #
 # Override and custom alias examples:
 
 # aliases:
 #   default: haiku  # Override the default model
-#   gpt: openai-responses/gpt-5.6-terra  # Override built-in gpt alias
+#   sol: openai-responses/gpt-5.4-mini  # Override built-in sol alias
 #   ds: openrouter/deepseek/deepseek-v4-pro  # Add custom aliases
 #   llama: groq/llama-3.3-70b-versatile
 #   kimi: moonshotai/kimi-latest
@@ -27,21 +27,11 @@
 #   gpt-4o: {}
 
 # More OpenAI Responses API models (the reasoning models).
-# The built-in `gpt` alias points at gpt-5.6-sol and `astra` at gpt-6-astra;
-# these are their siblings.
+# The built-in `sol`/`terra`/`luna` aliases cover the gpt-5.6 trio and
+# `astra` is gpt-6-astra; this is their smaller sibling.
 # `supports_subscription` bills to a ChatGPT login (see `oi auth openai`)
 # instead of the API key; it applies to gpt-5.x and gpt-6 on this provider.
 # openai-responses:
-#   gpt-5.6-terra:
-#     supports_thinking: true
-#     supports_search: true
-#     supports_vision: true
-#     supports_subscription: true
-#   gpt-5.6-luna:
-#     supports_thinking: true
-#     supports_search: true
-#     supports_vision: true
-#     supports_subscription: true
 #   gpt-5.4-mini:
 #     supports_thinking: true
 #     supports_search: true

@@ -12,9 +12,12 @@ config/`models.yaml` format, alias names).
 ### Added
 
 - `astra` alias for OpenAI's GPT-6 Astra (`gpt-6-astra`, Responses API):
-  search, thinking, vision, and ChatGPT-subscription billing like `gpt`.
+  search, thinking, vision, and ChatGPT-subscription billing like `sol`.
+- `terra` and `luna` aliases for GPT-5.6 Terra and Luna, same flags as `sol`.
 
 ### Changed
+
+- **Breaking:** the `gpt` alias is renamed to `sol` (still `gpt-5.6-sol`).
 
 - The `gemini-flash` alias now points to Gemini 3.8 Flash
   (`gemini-3.8-flash`), replacing 3.7 Flash.
