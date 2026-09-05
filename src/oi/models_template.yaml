@@ -4,7 +4,7 @@
 # How this works:
 # - This config is MERGED with the built-in models.yaml
 # - You only need to add NEW models or OVERRIDE existing ones
-# - Built-in aliases: sonnet, haiku, opus, fable, gpt, gemini-pro, gemini-flash
+# - Built-in aliases: sonnet, haiku, opus, fable, gpt, astra, gemini-pro, gemini-flash
 # - Top-level keys starting with _ are ignored (use for YAML anchors or to disable providers)
 #
 # Override and custom alias examples:
@@ -27,9 +27,10 @@
 #   gpt-4o: {}
 
 # More OpenAI Responses API models (the reasoning models).
-# The built-in `gpt` alias points at gpt-5.6-sol; these are its siblings.
+# The built-in `gpt` alias points at gpt-5.6-sol and `astra` at gpt-6-astra;
+# these are their siblings.
 # `supports_subscription` bills to a ChatGPT login (see `oi auth openai`)
-# instead of the API key; it applies to gpt-5.x on this provider.
+# instead of the API key; it applies to gpt-5.x and gpt-6 on this provider.
 # openai-responses:
 #   gpt-5.6-terra:
 #     supports_thinking: true

@@ -40,7 +40,7 @@ aliases:
 A model with no special settings is just `<model-id>: {}`.
 
 The keys shown above are the **entire** per-model schema (plus
-`supports_subscription`, which only applies to gpt-5.x under
+`supports_subscription`, which only applies to gpt-5.x and gpt-6 under
 `openai-responses` — see `oi auth openai`). Unknown keys are silently
 ignored, not rejected: an invented key like `base_url:` will merge cleanly,
 do nothing, and look like it worked. Base URLs are per-provider environment
