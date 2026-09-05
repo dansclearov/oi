@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-05
+
 ### Added
 
 - `astra` alias for OpenAI's GPT-6 Astra (`gpt-6-astra`, Responses API):
@@ -18,7 +20,6 @@ config/`models.yaml` format, alias names).
 ### Changed
 
 - **Breaking:** the `gpt` alias is renamed to `sol` (still `gpt-5.6-sol`).
-
 - The `gemini-flash` alias now points to Gemini 3.8 Flash
   (`gemini-3.8-flash`), replacing 3.7 Flash.
 
@@ -406,7 +407,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/dansclearov/oi/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/dansclearov/oi/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/dansclearov/oi/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/dansclearov/oi/compare/v0.2.2...v0.2.3
