@@ -476,6 +476,46 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   color, so the cursor line and bracket matching are off and the painted cursor
   is suppressed with a null `cursor_style` theme rather than neutral CSS (the
   visible cursor is the terminal's own anyway).
+- **Yomitan lookups** (`tui/lookup.py`, TUI-only): hover or click on a
+  kana/kanji/hangul character in the log looks the word up through
+  `yomitan-api` (the extension's native-messaging host, HTTP on
+  `127.0.0.1:19633`) and shows a popup under it. The lookup is Yomitan's own:
+  `POST /termEntries` with the text from the pointer to the end of the line
+  plus the start of the next (a word can wrap), `SCAN_LENGTH` chars; the
+  response's `originalTextLength` is the matched span, and its entries are
+  Yomitan's internal format (documented as unstable) which
+  `parse_term_entries` distills — structured-content glossaries are
+  flattened by `flatten_content` into styled `Text` lines (Jitendex's
+  `glossary` lists inline as `a; b`, tables as cell-aligned columns with
+  bold `th`, `sense-note`/`lang-source` asides on one line, ruby without
+  `rt`, attribution/examples dropped, tag chips and small print dimmed —
+  `_muted`: a `backgroundColor` or a sub-1em `fontSize`, which is how the
+  dictionaries mark their own secondary text — and ①-style sense numbers
+  as `1.` because they're ambiguous-width and CJK fallback fonts draw them
+  over the following space). The character under the pointer
+  comes from the widget's `render_line` strip (`content_region` +
+  `scroll_offset` → line, then a cell walk with `cell_len`, so double-width
+  text maps right). `LookupPopup` is a screen-level `VerticalScroll` on its
+  own `lookup` layer positioned like Textual's tooltip: `absolute_offset` at
+  the word's screen cell + `margin: 1 0` + `constrain: inside inflect`, so
+  it sits one row below the word and flips above when there's no room. Its
+  width is set per lookup from the longest body line (an auto width would
+  size to that line and clip instead of wrapping), and its `max-height`
+  from the rows on the word's roomier side, so on a short terminal it
+  shrinks instead of landing on top of the word. The app forwards
+  `MouseMove`/`Click` to it; hover is debounced (`HOVER_DELAY`, timer
+  restarted per move) and a lookup in flight is an `exclusive` worker in
+  the `lookup` group so a sweep only resolves where the pointer settles.
+  The popup stays while the pointer is on the matched span or on the popup
+  itself (wheel-scrollable), and hides on leaving it, on `ChatLog.Scrolled`
+  (wheel or a streaming reply moving text under a still pointer), and on
+  Esc (`_dismiss_lookup`, ahead of the interrupt). Hover is the
+  `yomitan_hover` config knob (`/yomitan` toggles it live via
+  `TOGGLE_SETTINGS`); click always looks up. When the host isn't listening
+  the client backs off `RETRY_AFTER`; only a click reports it (hint line),
+  hover stays silent so it never nags. Tests inject a fake client through
+  `OiApp(lookup_client=…)`; `tests/fixtures/yomitan_term_entries.json` is
+  the response example from yomitan-api's docs.
 - **Vim mode**: `tui/vim.py` — `VimHandler`, a modal key dispatcher over
   TextArea primitives (document index/location conversion, selection, edit
   methods, undo stack); motions/text objects are pure `(text, index)`

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 from rich.style import Style
 from rich.text import Text
-from textual import on
+from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -73,6 +73,7 @@ from oi.local_commands import (
 from oi.registry import ModelRegistry
 from oi.response_handler import coerce_tool_args
 from oi.tui import latex
+from oi.tui.lookup import LookupPopup, YomitanClient
 from oi.tui.markdown import OiMarkdown
 from oi.tui.renderer import (
     NativeToolCall,
@@ -910,6 +911,8 @@ class OiApp(App):
     Screen {
         background: ansi_default;
         color: ansi_default;
+        /* The dictionary popup floats over the conversation and the input. */
+        layers: default lookup;
     }
     #log {
         /* Fixed region above the pinned input: stable geometry keeps
@@ -1051,6 +1054,7 @@ class OiApp(App):
         ctx: ChatLoopContext,
         registry: ModelRegistry,
         is_new_chat: bool,
+        lookup_client: Optional[YomitanClient] = None,
     ) -> None:
         super().__init__()
         self.theme = "ansi-dark"
@@ -1094,6 +1098,7 @@ class OiApp(App):
         self._cursor_visible = True
         self._capabilities: Optional[ModelCapabilities] = None
         self._header_message_count = current_chat.metadata.message_count
+        self._lookup_client = lookup_client or YomitanClient()
 
     def compose(self) -> ComposeResult:
         # can_focus=False: clicking the log to start a mouse selection must not
@@ -1101,6 +1106,7 @@ class OiApp(App):
         # Keyboard scrolling stays available through the app-level bindings.
         yield ChatLog(id="log", can_focus=False)
         yield SlashMenu()
+        yield LookupPopup(self._lookup_client, hover=self._ctx.config.yomitan_hover)
         with Horizontal(id="input-row"):
             yield Static(Text("❯ "), id="prompt-marker")
             yield ChatInput(id="input")
@@ -1113,6 +1119,7 @@ class OiApp(App):
         )
         await self._replay_session_context()
         self._chat_log.anchor()
+        self._lookup.scope = self._chat_log
         input_widget = self._input
         input_widget.set_vim_enabled(self._ctx.config.vim_mode)
         input_widget.sync_height()
@@ -1197,6 +1204,38 @@ class OiApp(App):
     @property
     def _chat_log(self) -> ChatLog:
         return self.query_one("#log", ChatLog)
+
+    @property
+    def _lookup(self) -> LookupPopup:
+        return self.query_one(LookupPopup)
+
+    # --- dictionary lookup ---------------------------------------------
+
+    def on_mouse_move(self, event: events.MouseMove) -> None:
+        self._lookup.pointer_moved(event)
+
+    def on_click(self, event: events.Click) -> None:
+        self._lookup.pointer_clicked(event)
+
+    @on(ChatLog.Scrolled)
+    def _on_log_scrolled(self) -> None:
+        # The text moved under the pointer (wheel, or a streaming reply
+        # growing the anchored log): the popup no longer sits by its word.
+        self._lookup.hide()
+
+    @on(LookupPopup.Unreachable)
+    def _on_lookup_unreachable(self, message: LookupPopup.Unreachable) -> None:
+        self._flash_hint(
+            f"yomitan api not reachable at {message.url}", 2 * HINT_FLASH_SECONDS
+        )
+
+    def _dismiss_lookup(self) -> bool:
+        """Hide the dictionary popup. True when there was one to hide."""
+        popup = self._lookup
+        if not popup.display:
+            return False
+        popup.hide()
+        return True
 
     @property
     def _input(self) -> ChatInput:
@@ -1485,6 +1524,8 @@ class OiApp(App):
             label, message = toggle_setting(setting, self._ctx.config)
             if setting.key == "vim_mode":
                 self._input.set_vim_enabled(self._ctx.config.vim_mode)
+            elif setting.key == "yomitan_hover":
+                self._lookup.hover = self._ctx.config.yomitan_hover
             await self._mount_notice(label, message)
             return
 
@@ -1530,6 +1571,8 @@ class OiApp(App):
             await menu.update_filter(None)
             return
         if message.action == "interrupt":
+            if self._dismiss_lookup():
+                return
             if self._inline_editor is not None:
                 await self._cancel_edit()
             else:
@@ -1993,6 +2036,8 @@ class OiApp(App):
     # --- actions ---------------------------------------------------------
 
     def action_interrupt(self) -> None:
+        if self._dismiss_lookup():
+            return
         if self._turn_worker is not None and self._turn_worker.is_running:
             self._turn_worker.cancel()
 

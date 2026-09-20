@@ -20,6 +20,11 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
   `--no-tui` for one run, or `"tui": false` in `config.json` (`--tui` overrides
   that for a run).
 - Paste images with `Alt+V` (`Ctrl+V` on Mac) on vision-capable models.
+- Yomitan dictionary popups in the TUI: hover or click a Japanese word in the
+  chat to see Yomitan's entry for it, with your own dictionaries and
+  deinflection. Needs [yomitan-api](https://github.com/yomidevs/yomitan-api)
+  (the extension's local API) running in your browser; `/yomitan` toggles
+  hover, click always works.
 - LaTeX math in the TUI, rendered as real typeset formulas (inline and display,
   including `align`, matrices and `cases`) in terminals that speak the kitty
   graphics protocol (kitty, Ghostty, WezTerm). Needs the `latex` extra:
@@ -96,6 +101,7 @@ oi -c --ephemeral -p "probe an existing chat without dirtying it"
 /bookmark
 /vim
 /tui
+/yomitan          # toggle hover dictionary lookups (click still works)
 
 # Slash commands complete with Tab
 

@@ -9,6 +9,14 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- TUI: Yomitan dictionary popups. Hover (or click) a Japanese word in the
+  chat and the entry Yomitan would show in the browser appears under it,
+  looked up through [yomitan-api](https://github.com/yomidevs/yomitan-api)
+  with your own dictionaries. `/yomitan` toggles hover (`yomitan_hover` in
+  `config.json`); click always works.
+
 ### Fixed
 
 - TUI: `Ctrl+C` with text selected copies it even while a reply is streaming,

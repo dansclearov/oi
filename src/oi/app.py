@@ -238,6 +238,7 @@ TOGGLE_SETTINGS = {
     "/tui": ToggleSetting(
         key="tui", label="TUI mode", note=" Takes effect on the next launch."
     ),
+    "/yomitan": ToggleSetting(key="yomitan_hover", label="Yomitan hover lookup"),
 }
 
 

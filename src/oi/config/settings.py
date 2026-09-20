@@ -90,3 +90,6 @@ class Config:
         default_factory=lambda: load_user_config().get("vim_mode", False)
     )
     tui: bool = field(default_factory=lambda: load_user_config().get("tui", True))
+    yomitan_hover: bool = field(
+        default_factory=lambda: load_user_config().get("yomitan_hover", True)
+    )

@@ -18,6 +18,7 @@ LOCAL_COMMAND_SPECS = (
     LocalCommandSpec("/search", "Turn web search on for this chat"),
     LocalCommandSpec("/vim", "Toggle vim input mode"),
     LocalCommandSpec("/tui", "Toggle full-screen TUI mode (next launch)"),
+    LocalCommandSpec("/yomitan", "Toggle Yomitan hover lookup (TUI)"),
 )
 LOCAL_COMMANDS = {spec.name: spec for spec in LOCAL_COMMAND_SPECS}
 LOCAL_COMMAND_NAMES = tuple(spec.name for spec in LOCAL_COMMAND_SPECS)
