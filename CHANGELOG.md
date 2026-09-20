@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-20
+
 ### Added
 
 - TUI: Yomitan dictionary popups. Hover (or click) a Japanese word in the
@@ -425,7 +427,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/dansclearov/oi/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/dansclearov/oi/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/dansclearov/oi/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/dansclearov/oi/compare/v0.2.3...v0.3.0
