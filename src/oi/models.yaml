@@ -4,10 +4,10 @@ aliases:
   haiku: anthropic/claude-haiku-4-5
   opus: anthropic/claude-opus-5-5
   fable: anthropic/claude-fable-5-1
-  sol: openai-responses/gpt-5.6-sol
-  terra: openai-responses/gpt-5.6-terra
-  luna: openai-responses/gpt-5.6-luna
   astra: openai-responses/gpt-6-astra
+  sol: openai-responses/gpt-6-sol
+  terra: openai-responses/gpt-5.6-terra
+  luna: openai-responses/gpt-6-luna
   gemini-pro: google/gemini-3.1-pro-preview
   gemini-flash: google/gemini-3.8-flash
 
@@ -51,7 +51,12 @@ anthropic:
       anthropic_cache_tool_definitions: '5m'
 
 openai-responses:
-  gpt-5.6-sol:
+  gpt-6-astra:
+    supports_thinking: true
+    supports_search: true
+    supports_vision: true
+    supports_subscription: true
+  gpt-6-sol:
     supports_thinking: true
     supports_search: true
     supports_vision: true
@@ -61,12 +66,7 @@ openai-responses:
     supports_search: true
     supports_vision: true
     supports_subscription: true
-  gpt-5.6-luna:
-    supports_thinking: true
-    supports_search: true
-    supports_vision: true
-    supports_subscription: true
-  gpt-6-astra:
+  gpt-6-luna:
     supports_thinking: true
     supports_search: true
     supports_vision: true

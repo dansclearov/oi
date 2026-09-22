@@ -9,6 +9,12 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The `sol` and `luna` aliases now point to GPT-6 Sol (`gpt-6-sol`) and
+  GPT-6 Luna (`gpt-6-luna`), replacing their GPT-5.6 versions. `terra` stays
+  on GPT-5.6 Terra, which has no GPT-6 counterpart.
+
 ## [0.4.2] - 2026-09-22
 
 ### Changed
