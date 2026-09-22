@@ -7,7 +7,12 @@ from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models import Model
 
-from oi.core.client import LLMClient, _PreparedRequest, subscription_billing_active
+from oi.core.client import (
+    LLMClient,
+    _PreparedRequest,
+    subscription_billing_active,
+    thinking_forced_on,
+)
 from oi.llm_types import ChatOptions, ModelCapabilities
 from oi.registry import ModelRegistry
 
@@ -366,6 +371,77 @@ class TestLLMClient:
             "type": "enabled",
             "budget_tokens": 2048,
         }
+
+    def test_chat_disables_anthropic_thinking_explicitly(self, monkeypatch):
+        registry = Mock()
+        registry.get_provider_for_model.return_value = ("anthropic", "claude-haiku-4-5")
+        registry.get_model_capabilities.return_value = ModelCapabilities(
+            supports_thinking=True,
+            extra_params={
+                "anthropic_thinking": {"type": "enabled", "budget_tokens": 2048}
+            },
+        )
+        client = LLMClient(registry)
+        captured = {}
+        response = ModelResponse(parts=[TextPart(content="ok")])
+
+        async def fake_stream(
+            model_name, model_messages, model_settings, request_parameters, handler
+        ):
+            captured["model_settings"] = model_settings
+            return response
+
+        monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_stream)
+
+        client.chat([], "haiku", ChatOptions(silent=True, enable_thinking=False))
+
+        assert captured["model_settings"]["anthropic_thinking"] == {"type": "disabled"}
+
+    @pytest.mark.parametrize("model_id", ["claude-opus-5-5", "claude-fable-5-1"])
+    def test_chat_omits_thinking_for_always_thinking_models(
+        self, monkeypatch, model_id
+    ):
+        registry = Mock()
+        registry.get_provider_for_model.return_value = ("anthropic", model_id)
+        registry.get_model_capabilities.return_value = ModelCapabilities(
+            supports_thinking=True,
+            extra_params={"anthropic_thinking": {"type": "adaptive"}},
+        )
+        client = LLMClient(registry)
+        captured = {}
+        response = ModelResponse(parts=[TextPart(content="ok")])
+
+        async def fake_stream(
+            model_name, model_messages, model_settings, request_parameters, handler
+        ):
+            captured["model_settings"] = model_settings
+            return response
+
+        monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_stream)
+
+        client.chat([], "opus", ChatOptions(silent=True, enable_thinking=False))
+
+        settings = captured["model_settings"]
+        assert settings is None or "anthropic_thinking" not in settings
+
+
+class TestThinkingForcedOn:
+    @pytest.mark.parametrize(
+        ("provider", "model_id", "expected"),
+        [
+            ("anthropic", "claude-opus-5-5", True),
+            ("anthropic", "claude-fable-5-1", True),
+            ("anthropic", "claude-opus-5", False),
+            ("anthropic", "claude-sonnet-5", False),
+            ("openai-responses", "claude-opus-5-5", False),
+        ],
+    )
+    def test_matches_always_thinking_anthropic_models(
+        self, provider, model_id, expected
+    ):
+        registry = Mock()
+        registry.get_provider_for_model.return_value = (provider, model_id)
+        assert thinking_forced_on(registry, "alias") is expected
 
 
 class TestSubscriptionBillingActive:

@@ -9,6 +9,18 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The `opus` alias now points to Claude Opus 5.5 (`claude-opus-5-5`),
+  replacing Claude Opus 5.
+
+### Fixed
+
+- `--no-thinking` no longer fails with a 400 on Anthropic models whose thinking
+  can't be turned off (Claude Opus 5.5, Fable). The flag is dropped for them
+  with a warning at startup (stderr in headless mode); the model thinks at its
+  default effort and shows no trace.
+
 ## [0.4.1] - 2026-09-20
 
 ### Added

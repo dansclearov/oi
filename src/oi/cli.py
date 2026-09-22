@@ -98,7 +98,7 @@ def parse_arguments(registry: ModelRegistry) -> argparse.Namespace:
     behavior.add_argument(
         "--no-thinking",
         action="store_true",
-        help="Disable thinking entirely",
+        help="Disable thinking entirely (warns and runs with it on where the model can't turn it off)",
     )
     behavior.add_argument(
         "--hide-thinking",

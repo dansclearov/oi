@@ -52,6 +52,7 @@ from oi.app import (
     _maybe_generate_smart_title,
     _update_title_from_first_user_message,
     enable_search,
+    thinking_off_warning,
     toggle_setting,
 )
 from oi.core.message_utils import (
@@ -1284,6 +1285,11 @@ class OiApp(App):
         await self._chat_log.mount(
             Static(Text(self._header_text()), classes="header", id="header")
         )
+        warning = thinking_off_warning(
+            self._model_registry, self._ctx.active_model, self._ctx.chat_options
+        )
+        if warning:
+            await self._mount_notice(WARNING_LABEL, warning)
 
         if not has_user_messages:
             system_message, from_chat = self._ctx.prompt_str, False

@@ -29,6 +29,15 @@ MAX_CHAT_ATTEMPTS = 3
 RETRY_WAIT_MIN_SECONDS = 4
 RETRY_WAIT_MAX_SECONDS = 10
 
+# Anthropic models whose thinking is always on: they return 400 for
+# `anthropic_thinking={"type": "disabled"}` (and for a budget), so thinking
+# can only be left unset. Matched by prefix like pydantic-ai's model profiles.
+ANTHROPIC_ALWAYS_THINKING_PREFIXES = (
+    "claude-fable-5",
+    "claude-mythos-5",
+    "claude-opus-5-5",
+)
+
 
 def _subscription_disabled() -> bool:
     """True when the user has opted out of subscription billing via env."""
@@ -49,6 +58,21 @@ def _use_subscription(provider_name: str, capabilities: ModelCapabilities) -> bo
         and codex_auth.is_logged_in()
         and not _subscription_disabled()
     )
+
+
+def _thinking_forced_on(provider_name: str, provider_model_id: str) -> bool:
+    return provider_name == "anthropic" and provider_model_id.startswith(
+        ANTHROPIC_ALWAYS_THINKING_PREFIXES
+    )
+
+
+def thinking_forced_on(registry: ModelRegistry, model_name_or_alias: str) -> bool:
+    """Whether a model's thinking can't be turned off, so `--no-thinking` is
+    dropped for it (frontends warn at startup)."""
+    provider_name, provider_model_id = registry.get_provider_for_model(
+        model_name_or_alias
+    )
+    return _thinking_forced_on(provider_name, provider_model_id)
 
 
 def subscription_billing_active(
@@ -274,10 +298,17 @@ class LLMClient:
                     {"include_thoughts": True},
                 )
         elif provider_name == "anthropic":
-            # A model can pin a thinking budget in its extra_params (e.g. Haiku,
-            # which has no adaptive mode), and extra_params are merged
-            # unconditionally — so disable explicitly to honor enable_thinking.
-            model_settings["anthropic_thinking"] = {"type": "disabled"}
+            if _thinking_forced_on(provider_name, provider_model_id):
+                # These models reject every explicit thinking mode, including
+                # "disabled"; omitted, they think at their default effort and
+                # return the trace empty (display "omitted").
+                model_settings.pop("anthropic_thinking", None)
+            else:
+                # A model can pin a thinking budget in its extra_params (e.g.
+                # Haiku, which has no adaptive mode), and extra_params are
+                # merged unconditionally — so disable explicitly to honor
+                # enable_thinking.
+                model_settings["anthropic_thinking"] = {"type": "disabled"}
 
         if effective_options.enable_search:
             self._apply_search_settings(

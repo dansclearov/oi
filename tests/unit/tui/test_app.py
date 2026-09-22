@@ -140,6 +140,27 @@ def test_header_shows_search_only_when_it_is_in_play(tmp_path):
     asyncio.run(scenario())
 
 
+def test_no_thinking_on_an_always_thinking_model_warns_at_startup(tmp_path):
+    async def notices_for(model_id, options):
+        app, _, ctx = _make_app(tmp_path, chat_options=options)
+        ctx.llm_client.registry.get_provider_for_model.return_value = (
+            "anthropic",
+            model_id,
+        )
+        async with app.run_test():
+            return [str(w.render()) for w in app.query(".warning-label")]
+
+    async def scenario():
+        warnings = await notices_for(
+            "claude-opus-5-5", ChatOptions(enable_thinking=False)
+        )
+        assert len(warnings) == 1 and "--no-thinking" in warnings[0]
+        assert await notices_for("claude-opus-5-5", ChatOptions()) == []
+        assert await notices_for("claude-x", ChatOptions(enable_thinking=False)) == []
+
+    asyncio.run(scenario())
+
+
 def test_search_command_turns_search_on_and_updates_the_header(tmp_path):
     async def scenario():
         app, _, ctx = _make_app(

@@ -8,6 +8,7 @@ from rich.cells import cell_len
 from pydantic_ai.messages import ModelResponse, TextPart
 
 from oi.app import (
+    thinking_off_warning,
     ChatLoopContext,
     _handle_local_command,
     _update_title_from_first_user_message,
@@ -543,3 +544,26 @@ def test_first_message_title_is_capped_in_cells_and_marks_the_cut():
 
     assert cell_len(chat.metadata.title) <= MAX_TITLE_LENGTH
     assert chat.metadata.title.endswith("...")
+
+
+@pytest.mark.parametrize(
+    ("model_id", "enable_thinking", "warns"),
+    [
+        ("claude-opus-5-5", False, True),
+        ("claude-opus-5-5", True, False),
+        ("claude-sonnet-5", False, False),
+    ],
+)
+def test_thinking_off_warning_only_for_models_that_cannot_turn_it_off(
+    model_id, enable_thinking, warns
+):
+    registry = Mock()
+    registry.get_provider_for_model.return_value = ("anthropic", model_id)
+    warning = thinking_off_warning(
+        registry, "opus", ChatOptions(enable_thinking=enable_thinking)
+    )
+    if warns:
+        assert warning is not None
+        assert "opus" in warning and "--no-thinking" in warning
+    else:
+        assert warning is None

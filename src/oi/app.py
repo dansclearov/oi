@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from pydantic_ai.messages import ModelMessage, ModelResponse
 
 from oi.core.chat_manager import ChatManager
-from oi.core.client import LLMClient, subscription_billing_active
+from oi.core.client import LLMClient, subscription_billing_active, thinking_forced_on
 from oi.core.message_utils import (
     count_non_system_messages,
     flatten_history,
@@ -187,6 +187,19 @@ def _billing_tag(registry: ModelRegistry, model_name: str) -> str:
     including models with no subscription option.
     """
     return " (sub)" if subscription_billing_active(registry, model_name) else " (api)"
+
+
+def thinking_off_warning(
+    registry: ModelRegistry, model_name: str, options: ChatOptions
+) -> Optional[str]:
+    """The startup notice for `--no-thinking` on a model that can't turn
+    thinking off; None when there is nothing to warn about."""
+    if options.enable_thinking or not thinking_forced_on(registry, model_name):
+        return None
+    return (
+        f"{model_name} can't turn thinking off; ignoring --no-thinking. "
+        "It thinks at its default effort, trace hidden."
+    )
 
 
 def _print_chat_session_context(
@@ -456,6 +469,11 @@ def run_chat_loop(current_chat: Chat, ctx: ChatLoopContext) -> None:
     warmup.warm()
     source_tag = _billing_tag(ctx.llm_client.registry, ctx.active_model)
     _print_chat_session_context(current_chat, ctx.prompt_str, source_tag)
+    warning = thinking_off_warning(
+        ctx.llm_client.registry, ctx.active_model, ctx.chat_options
+    )
+    if warning:
+        print(ansi_message(WARNING_LABEL, warning))
     capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
     active_capabilities = ctx.llm_client.resolve_capabilities(
         ctx.active_model, capabilities_override
@@ -587,6 +605,10 @@ def run_headless_turn(
 
     ctx.active_model = current_chat.metadata.model
     capabilities_override = current_chat.metadata.get_model_capabilities_snapshot()
+    warning = thinking_off_warning(registry, ctx.active_model, ctx.chat_options)
+    if warning:
+        # stderr keeps stdout pipe-clean.
+        print(ansi_message(WARNING_LABEL, warning), file=sys.stderr)
 
     current_chat.append_user_message(args.prompt)
     try:
