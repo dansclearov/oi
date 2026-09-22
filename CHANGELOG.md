@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-22
+
 ### Changed
 
 - The `opus` alias now points to Claude Opus 5.5 (`claude-opus-5-5`),
@@ -439,7 +441,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/dansclearov/oi/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/dansclearov/oi/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/dansclearov/oi/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/dansclearov/oi/compare/v0.3.0...v0.3.1
