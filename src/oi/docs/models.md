@@ -24,7 +24,7 @@ set of valid providers and ids is defined by pydantic-ai, not by oi.
 
 ```yaml
 <provider>:                   # pydantic-ai provider prefix, e.g. anthropic
-  <model-id>:                 # provider's model id, e.g. claude-sonnet-5
+  <model-id>:                 # provider's model id, e.g. claude-sonnet-5-5
     supports_thinking: true   # model can emit reasoning traces (default: false)
     supports_search: true     # --search web search works (default: false)
     supports_vision: true     # accepts image input (default: false)

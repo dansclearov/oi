@@ -38,6 +38,10 @@ ANTHROPIC_ALWAYS_THINKING_PREFIXES = (
     "claude-opus-5-5",
 )
 
+# Anthropic models that reject `{"type": "disabled"}` but still have an off
+# switch: `between_tools` skips thinking before the first reply.
+ANTHROPIC_BETWEEN_TOOLS_OFF_PREFIXES = ("claude-sonnet-5-5",)
+
 
 def _subscription_disabled() -> bool:
     """True when the user has opted out of subscription billing via env."""
@@ -303,6 +307,8 @@ class LLMClient:
                 # "disabled"; omitted, they think at their default effort and
                 # return the trace empty (display "omitted").
                 model_settings.pop("anthropic_thinking", None)
+            elif provider_model_id.startswith(ANTHROPIC_BETWEEN_TOOLS_OFF_PREFIXES):
+                model_settings["anthropic_thinking"] = {"type": "between_tools"}
             else:
                 # A model can pin a thinking budget in its extra_params (e.g.
                 # Haiku, which has no adaptive mode), and extra_params are

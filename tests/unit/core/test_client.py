@@ -397,6 +397,33 @@ class TestLLMClient:
 
         assert captured["model_settings"]["anthropic_thinking"] == {"type": "disabled"}
 
+    def test_chat_turns_sonnet_5_5_thinking_off_with_between_tools(self, monkeypatch):
+        registry = Mock()
+        registry.get_provider_for_model.return_value = (
+            "anthropic",
+            "claude-sonnet-5-5",
+        )
+        registry.get_model_capabilities.return_value = ModelCapabilities(
+            supports_thinking=True
+        )
+        client = LLMClient(registry)
+        captured = {}
+        response = ModelResponse(parts=[TextPart(content="ok")])
+
+        async def fake_stream(
+            model_name, model_messages, model_settings, request_parameters, handler
+        ):
+            captured["model_settings"] = model_settings
+            return response
+
+        monkeypatch.setattr(client, "_stream_model_response_with_retry", fake_stream)
+
+        client.chat([], "sonnet", ChatOptions(silent=True, enable_thinking=False))
+
+        assert captured["model_settings"]["anthropic_thinking"] == {
+            "type": "between_tools"
+        }
+
     @pytest.mark.parametrize("model_id", ["claude-opus-5-5", "claude-fable-5-1"])
     def test_chat_omits_thinking_for_always_thinking_models(
         self, monkeypatch, model_id
@@ -433,6 +460,7 @@ class TestThinkingForcedOn:
             ("anthropic", "claude-fable-5-1", True),
             ("anthropic", "claude-opus-5", False),
             ("anthropic", "claude-sonnet-5", False),
+            ("anthropic", "claude-sonnet-5-5", False),
             ("openai-responses", "claude-opus-5-5", False),
         ],
     )

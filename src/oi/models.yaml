@@ -1,6 +1,6 @@
 aliases:
   default: sonnet
-  sonnet: anthropic/claude-sonnet-5
+  sonnet: anthropic/claude-sonnet-5-5
   haiku: anthropic/claude-haiku-4-5
   opus: anthropic/claude-opus-5-5
   fable: anthropic/claude-fable-5-1
@@ -12,7 +12,7 @@ aliases:
   gemini-flash: google/gemini-3.8-flash
 
 anthropic:
-  claude-sonnet-5:
+  claude-sonnet-5-5:
     supports_search: true
     supports_thinking: true
     supports_vision: true
