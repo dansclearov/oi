@@ -27,7 +27,7 @@
 #   gpt-4o: {}
 
 # More OpenAI Responses API models (the reasoning models).
-# The built-in `astra`/`sol`/`terra`/`luna` aliases are gpt-6-astra, gpt-6-sol,
+# The built-in `astra`/`sol`/`terra`/`luna` aliases are gpt-6-astra, gpt-6.1-sol,
 # gpt-5.6-terra and gpt-6-luna, largest to smallest; this is a smaller sibling.
 # `supports_subscription` bills to a ChatGPT login (see `oi auth openai`)
 # instead of the API key; it applies to gpt-5.x and gpt-6 on this provider.

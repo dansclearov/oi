@@ -9,6 +9,11 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The `sol` alias now points to GPT-6.1 Sol (`gpt-6.1-sol`), replacing
+  GPT-6 Sol.
+
 ## [0.4.3] - 2026-09-28
 
 ### Changed
