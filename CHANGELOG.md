@@ -9,8 +9,11 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-09
+
 ### Changed
 
+- Python 3.11 or newer is now required (pydantic-ai is dropping 3.10).
 - The `sol` alias now points to GPT-6.1 Sol (`gpt-6.1-sol`), replacing
   GPT-6 Sol.
 - The `haiku` alias (also the smart-title model) now points to Claude Haiku
@@ -464,7 +467,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/dansclearov/oi/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/dansclearov/oi/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/dansclearov/oi/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/dansclearov/oi/compare/v0.4.0...v0.4.1

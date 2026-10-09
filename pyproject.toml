@@ -1,6 +1,6 @@
 [project]
 name = "oi-chat"
-version = "0.4.3"
+version = "0.5.0"
 description = "Command-line chat interface for multiple LLM providers, with streaming output, persistent chats, and YAML-based model aliases."
 readme = "README.md"
 authors = [
@@ -8,7 +8,7 @@ authors = [
 ]
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["llm", "cli", "ai", "chat", "openai", "anthropic", "claude", "gemini"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -16,7 +16,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",

@@ -65,8 +65,8 @@ rejected as too similar to the existing `oicli`). Because the dist name no longe
 matches the package dir, hatchling needs the explicit
 `[tool.hatch.build.targets.wheel] packages = ["src/oi"]` in `pyproject.toml`.
 
-**Python support:** `requires-python = ">=3.10"`. CI (`.github/workflows/ci.yml`)
-runs the test suite across 3.10–3.13 plus a lint job (`pre-commit run
+**Python support:** `requires-python = ">=3.11"`. CI (`.github/workflows/ci.yml`)
+runs the test suite across 3.11–3.13 plus a lint job (`pre-commit run
 --all-files` + `ty check`) on every push/PR.
 
 **Action versions:** the `actions/*` steps use floating major tags (e.g.
