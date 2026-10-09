@@ -698,7 +698,7 @@ def _print_openai_auth_status() -> None:
     if creds is None:
         print(ansi_message(INFO_LABEL, "OpenAI: not logged in (using API key)."))
         return
-    who = creds.email or creds.account_id or "unknown account"
+    who = codex_auth.account_email(creds) or creds.account_id
     print(ansi_message(INFO_LABEL, f"OpenAI: logged in as {who}."))
 
 
@@ -727,7 +727,7 @@ def run_auth(args) -> None:
         except CodexAuthError as e:
             print(ansi_message(ERROR_LABEL, str(e)))
             sys.exit(1)
-        who = creds.email or creds.account_id or "your subscription"
+        who = codex_auth.account_email(creds) or creds.account_id
         print(ansi_message(INFO_LABEL, f"Logged in as {who}."))
 
 

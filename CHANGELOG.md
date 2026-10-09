@@ -13,6 +13,13 @@ config/`models.yaml` format, alias names).
 
 - The `sol` alias now points to GPT-6.1 Sol (`gpt-6.1-sol`), replacing
   GPT-6 Sol.
+- The `haiku` alias (also the smart-title model) now points to Claude Haiku
+  5.5 (`claude-haiku-5-5`), replacing Claude Haiku 4.5. It uses adaptive
+  thinking like the other Claude models, so the pinned 2048-token thinking
+  budget is gone.
+- ChatGPT subscription login, token refresh and requests now go through
+  pydantic-ai's built-in `openai-codex` provider (requires pydantic-ai
+  2.54+). Existing logins carry over.
 
 ## [0.4.3] - 2026-09-28
 

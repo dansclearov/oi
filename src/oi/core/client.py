@@ -283,10 +283,6 @@ class LLMClient:
             model_settings.setdefault("max_tokens", capabilities.max_tokens)
         model_settings.update(effective_options.extra_settings)
 
-        if use_subscription:
-            # The Codex backend rejects stored responses.
-            model_settings["openai_store"] = False
-
         if effective_options.enable_thinking:
             if provider_name in {"openai", "openai-responses"}:
                 model_settings.setdefault("openai_reasoning_summary", "detailed")
@@ -310,10 +306,9 @@ class LLMClient:
             elif provider_model_id.startswith(ANTHROPIC_BETWEEN_TOOLS_OFF_PREFIXES):
                 model_settings["anthropic_thinking"] = {"type": "between_tools"}
             else:
-                # A model can pin a thinking budget in its extra_params (e.g.
-                # Haiku, which has no adaptive mode), and extra_params are
-                # merged unconditionally — so disable explicitly to honor
-                # enable_thinking.
+                # Omitted, current models think adaptively, and a thinking
+                # budget pinned in extra_params is merged unconditionally —
+                # so disable explicitly to honor enable_thinking.
                 model_settings["anthropic_thinking"] = {"type": "disabled"}
 
         if effective_options.enable_search:
@@ -338,13 +333,7 @@ class LLMClient:
         # current turn in case the subscription is found exhausted mid-request.
         api_fallback: Optional[tuple[str, Optional[ModelSettings]]] = None
         if use_subscription:
-            api_settings = {
-                k: v for k, v in model_settings.items() if k != "openai_store"
-            }
-            api_fallback = (
-                model_name,
-                ModelSettings(api_settings) if api_settings else None,
-            )
+            api_fallback = (model_name, model_settings_param)
 
         renderer = (
             renderer_factory(capabilities, effective_options)
@@ -395,17 +384,9 @@ class LLMClient:
 
     def _build_subscription_model(self, provider_model_id: str) -> Model:
         """Build a Responses model that bills to the ChatGPT subscription."""
-        from pydantic_ai.models.openai import OpenAIResponsesModel
-        from pydantic_ai.providers.openai import OpenAIProvider
+        from pydantic_ai.models.openai_codex import OpenAICodexModel
 
-        access_token, account_id = codex_auth.get_access_token()
-        http_client = codex_auth.build_async_client(access_token, account_id)
-        provider = OpenAIProvider(
-            base_url=codex_auth.CODEX_BASE_URL,
-            api_key="unused",
-            http_client=http_client,
-        )
-        return OpenAIResponsesModel(provider_model_id, provider=provider)
+        return OpenAICodexModel(provider_model_id, provider=codex_auth.build_provider())
 
     async def _resolve_model(self, target: Model | str) -> Model:
         """Build the pydantic-ai model for a turn, off the event loop.
