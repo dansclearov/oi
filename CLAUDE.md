@@ -879,8 +879,20 @@ uv run oi --help   # Smoke test
 uv run python -c "from oi.registry import ModelRegistry; print(list(ModelRegistry().get_available_models().keys()))"  # Test model loading
 
 # Headless e2e smoke — `--ephemeral` guarantees no chat dir is written or modified.
-# Use a cheap/fast model and `--no-thinking` for deterministic, grep-friendly output.
+# PONG only proves the wiring (key, routing, one streamed reply) — use it for that.
 uv run oi -p "say only the word PONG" --ephemeral -m haiku --no-thinking
 ```
+
+PONG is the floor, not the budget. Live test calls cost cents, which is nothing
+next to a wrong conclusion, so test a feature with a prompt that actually
+exercises it, on the model in question, as many runs as it takes. **Thinking
+in particular needs a hard prompt**: current models think adaptively and skip
+it entirely on easy questions (`17*23`, bat-and-ball), so an absent trace on a
+trivial prompt says nothing about whether thinking works. Use something that
+needs real reasoning (a short olympiad-style proof, e.g. "find all n with
+n²+2ⁿ a perfect square, prove it complete") and expect the bar to keep rising as
+models get stronger — if a trace is missing, raise the difficulty before
+concluding anything is broken. Same for search: ask something only a live
+lookup can answer.
 
 Do NOT reach for `-c --ephemeral -p "..."` as a casual smoke test — `-c` loads the user's actual latest chat, so even with `--ephemeral` (no save) you still send their full real conversation to the API and then prompt the model with something unrelated. Waste of tokens, confusing for the model. If you really need to exercise the multi-turn path, create an explicit fixture chat first.

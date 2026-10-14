@@ -9,6 +9,10 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- New `argon` alias for Google's Gemini 4 Argon (`gemini-4-argon`).
+
 ## [0.5.0] - 2026-10-09
 
 ### Changed

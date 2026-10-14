@@ -8,6 +8,7 @@ aliases:
   sol: openai-responses/gpt-6.1-sol
   terra: openai-responses/gpt-5.6-terra
   luna: openai-responses/gpt-6-luna
+  argon: google/gemini-4-argon
   gemini-pro: google/gemini-3.1-pro-preview
   gemini-flash: google/gemini-3.8-flash
 
@@ -72,6 +73,10 @@ openai-responses:
     supports_subscription: true
 
 google:
+  gemini-4-argon:
+    supports_thinking: true
+    supports_search: true
+    supports_vision: true
   gemini-3.1-pro-preview:
     supports_thinking: true
     supports_search: true
