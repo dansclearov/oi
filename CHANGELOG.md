@@ -9,6 +9,11 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The `terra` alias now points to GPT-6.1 Terra (`gpt-6.1-terra`), replacing
+  GPT-5.6 Terra.
+
 ## [0.5.1] - 2026-10-14
 
 ### Added

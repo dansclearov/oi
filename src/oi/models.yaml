@@ -6,7 +6,7 @@ aliases:
   fable: anthropic/claude-fable-5-1
   astra: openai-responses/gpt-6-astra
   sol: openai-responses/gpt-6.1-sol
-  terra: openai-responses/gpt-5.6-terra
+  terra: openai-responses/gpt-6.1-terra
   luna: openai-responses/gpt-6-luna
   argon: google/gemini-4-argon
   gemini-pro: google/gemini-3.1-pro-preview
@@ -61,7 +61,7 @@ openai-responses:
     supports_search: true
     supports_vision: true
     supports_subscription: true
-  gpt-5.6-terra:
+  gpt-6.1-terra:
     supports_thinking: true
     supports_search: true
     supports_vision: true
