@@ -359,8 +359,10 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   trail the typed line by a frame.
 - **Interrupt = worker cancellation**: Ctrl+C (priority binding, so it
   pre-empts Textual's own `ctrl+c` → `screen.copy_text`) forks in
-  `action_interrupt_or_quit`: copy `screen.get_selected_text()` via
-  `copy_to_clipboard` (OSC 52) and clear the selection when there is one,
+  `action_interrupt_or_quit`: copy the focused `ChatInput`'s own
+  `selected_text` (a TextArea selection is never part of the screen
+  selection), else `screen.get_selected_text()`, via `copy_to_clipboard`
+  (OSC 52) and clear the selection when there is one,
   else cancel the turn worker while streaming, else arm exit for
   `CTRL_C_EXIT_WINDOW` and quit on a second press. Copy outranks interrupt
   so selecting from a streaming reply doesn't cut it short (Esc still does);
@@ -525,6 +527,8 @@ Format: `prompt_[name].txt`, loaded via `prompts.py:read_system_message_from_fil
   (insert/visual → normal, or clear pending) → interrupt-stream (posted):
   routing the mode change through the app's message queue would apply it
   *after* the keys typed right behind Esc, which then insert as text.
+  Yanks also go to the system clipboard (`copy_to_clipboard`), not just
+  the internal `p` register.
   `/vim` toggles it live and persists via
   `update_user_config`; submit resets to insert mode. `VimModeChanged`
   carries `None` when vim is off, which drives both the cursor shape and the

@@ -308,11 +308,12 @@ def test_hint_line_shows_the_vim_mode(tmp_path):
             await pilot.pause()
             assert hint() == "-- VISUAL LINE --"
 
-            # A ctrl+c flash overrides the whole line, then it comes back.
-            app.screen.get_selected_text = lambda: None
+            # A ctrl+c flash (copying the visual selection) overrides the
+            # whole line, then it comes back.
+            app.copy_to_clipboard = lambda text: None
             await pilot.press("ctrl+c")
             await pilot.pause()
-            assert "again to exit" in hint()
+            assert "copied" in hint()
             app._restore_hint()
             assert hint() == "-- VISUAL LINE --"
 
@@ -393,5 +394,30 @@ def test_mode_changes_are_reported():
             Mode.NORMAL,
             Mode.INSERT,
         ]
+
+    asyncio.run(scenario())
+
+
+def test_yank_copies_to_system_clipboard():
+    async def scenario():
+        app = _make_input()
+        copied: list[str] = []
+        app.copy_to_clipboard = copied.append
+        async with app.run_test() as pilot:
+            from oi.tui.app import ChatInput
+
+            chat_input = app.query_one(ChatInput)
+            chat_input.set_vim_enabled(True)
+            chat_input.insert("foo bar\nbaz")
+            chat_input.focus()
+            await pilot.pause()
+            for key in ["escape", "g", "g", "y", "w"]:
+                await pilot.press(key)
+            for key in ["y", "y"]:
+                await pilot.press(key)
+            for key in ["v", "e", "y"]:
+                await pilot.press(key)
+            assert copied == ["foo ", "foo bar\n", "foo"]
+            assert chat_input.text == "foo bar\nbaz"
 
     asyncio.run(scenario())

@@ -2074,15 +2074,23 @@ class OiApp(App):
         self._flash_hint("press ctrl+c again to exit", CTRL_C_EXIT_WINDOW)
 
     def _copy_selection(self) -> bool:
-        """Copy the screen selection if there is one. True when copied."""
-        selected = self.screen.get_selected_text()
-        if not selected:
-            return False
-        self.copy_to_clipboard(selected)
-        self.clear_selection()
+        """Copy the input's or the screen's selection. True when copied.
+
+        A selection inside a focused input is the TextArea's own (the screen
+        selection never covers it), so that is checked first.
+        """
+        focused = self.focused
+        if isinstance(focused, ChatInput) and focused.selected_text:
+            self.copy_to_clipboard(focused.selected_text)
+        else:
+            selected = self.screen.get_selected_text()
+            if not selected:
+                return False
+            self.copy_to_clipboard(selected)
+            self.clear_selection()
+            self._input.focus()
         self._exit_armed_at = None
         self._flash_hint("copied to clipboard", HINT_FLASH_SECONDS)
-        self._input.focus()
         return True
 
     def action_copy_selection(self) -> None:

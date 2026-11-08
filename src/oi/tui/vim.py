@@ -9,7 +9,8 @@ Supported: normal/visual/visual-line modes; `h j k l w b e 0 ^ $ gg G`
 motions with counts; `f F t T ; ,` finds; `i a I A o O` insert entries;
 `x X r s S D C ~` edits; `d c y` operators composed with motions, doubled
 (`dd cc yy`), or with `i`/`a` text objects (`w " ' ` ( ) b [ ] { } B`);
-`p P` with one internal register (charwise/linewise); `u`/`Ctrl+R` undo/redo;
+`p P` with one internal register (charwise/linewise) — yanks also go to
+the system clipboard; `u`/`Ctrl+R` undo/redo;
 `v V` visual with `o` end-swap and operators/objects on the selection.
 """
 
@@ -547,6 +548,7 @@ class VimHandler:
         self._register_linewise = linewise
 
         if operator == "y":
+            self.ta.app.copy_to_clipboard(snippet)
             self._move(start, select=False)
             self.enter_normal()
             return
@@ -571,6 +573,7 @@ class VimHandler:
         self._register_linewise = True
 
         if operator == "y":
+            self.ta.app.copy_to_clipboard(self._register)
             self._move(start_idx, select=False)
             self.enter_normal()
             return

@@ -422,6 +422,29 @@ class TestCtrlC:
 
         asyncio.run(scenario())
 
+    def test_copies_input_selection(self, tmp_path):
+        from textual.widgets.text_area import Selection
+
+        async def scenario():
+            app, chat, ctx = _make_app(tmp_path)
+            copied: list[str] = []
+
+            async with app.run_test() as pilot:
+                app.copy_to_clipboard = copied.append
+                app._input.insert("hello world")
+                app._input.selection = Selection((0, 0), (0, 5))
+                await pilot.pause()
+
+                for key in ("ctrl+c", "super+c"):
+                    await pilot.press(key)
+                    await pilot.pause()
+                assert copied == ["hello", "hello"]
+                assert app.is_running
+                assert app._input.text == "hello world"
+                assert "copied" in self._hint(app)
+
+        asyncio.run(scenario())
+
     def test_double_press_exits_and_single_press_only_arms(self, tmp_path):
         async def scenario():
             app, chat, ctx = _make_app(tmp_path)

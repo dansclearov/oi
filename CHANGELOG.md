@@ -14,6 +14,11 @@ config/`models.yaml` format, alias names).
 - The `terra` alias now points to GPT-6.1 Terra (`gpt-6.1-terra`), replacing
   GPT-5.6 Terra.
 
+### Fixed
+
+- TUI: Ctrl+C / Cmd+C now copy text selected in the input box, and vim yanks
+  (`y`, `yy`, visual `y`) also copy to the system clipboard.
+
 ## [0.5.1] - 2026-10-14
 
 ### Added
