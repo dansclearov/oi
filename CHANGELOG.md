@@ -9,6 +9,11 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The `fable` alias now points to Claude Fable 5.2 (`claude-fable-5-2`),
+  replacing Claude Fable 5.1.
+
 ## [0.5.2] - 2026-11-08
 
 ### Changed

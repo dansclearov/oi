@@ -424,7 +424,9 @@ class TestLLMClient:
             "type": "between_tools"
         }
 
-    @pytest.mark.parametrize("model_id", ["claude-opus-5-5", "claude-fable-5-1"])
+    @pytest.mark.parametrize(
+        "model_id", ["claude-opus-5-5", "claude-fable-5-1", "claude-fable-5-2"]
+    )
     def test_chat_omits_thinking_for_always_thinking_models(
         self, monkeypatch, model_id
     ):
