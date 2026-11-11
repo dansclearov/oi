@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-11
+
 ### Added
 
 - New `carbon` alias for Google's Gemini 4 Carbon (`gemini-4-carbon`).
@@ -496,7 +498,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/dansclearov/oi/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/dansclearov/oi/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/dansclearov/oi/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/dansclearov/oi/compare/v0.5.0...v0.5.1
