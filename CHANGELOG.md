@@ -9,6 +9,10 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- New `carbon` alias for Google's Gemini 4 Carbon (`gemini-4-carbon`).
+
 ## [0.5.3] - 2026-11-09
 
 ### Changed
