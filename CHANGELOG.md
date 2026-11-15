@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-15
+
 ### Added
 
 - New `hydrogen` alias for Google's Gemini 4 Hydrogen (`gemini-4-hydrogen`).
@@ -509,7 +511,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/dansclearov/oi/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/dansclearov/oi/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/dansclearov/oi/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/dansclearov/oi/compare/v0.5.1...v0.5.2
