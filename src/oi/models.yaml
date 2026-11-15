@@ -9,9 +9,8 @@ aliases:
   terra: openai-responses/gpt-6.1-terra
   luna: openai-responses/gpt-6-luna
   carbon: google/gemini-4-carbon
+  hydrogen: google/gemini-4-hydrogen
   argon: google/gemini-4-argon
-  gemini-pro: google/gemini-3.1-pro-preview
-  gemini-flash: google/gemini-3.8-flash
 
 anthropic:
   claude-sonnet-5-5:
@@ -78,15 +77,11 @@ google:
     supports_thinking: true
     supports_search: true
     supports_vision: true
+  gemini-4-hydrogen:
+    supports_thinking: true
+    supports_search: true
+    supports_vision: true
   gemini-4-argon:
-    supports_thinking: true
-    supports_search: true
-    supports_vision: true
-  gemini-3.1-pro-preview:
-    supports_thinking: true
-    supports_search: true
-    supports_vision: true
-  gemini-3.8-flash:
     supports_thinking: true
     supports_search: true
     supports_vision: true

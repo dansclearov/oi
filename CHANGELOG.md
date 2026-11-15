@@ -9,6 +9,17 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- New `hydrogen` alias for Google's Gemini 4 Hydrogen (`gemini-4-hydrogen`).
+
+### Removed
+
+- **Breaking:** the `gemini-pro` and `gemini-flash` aliases and their Gemini
+  3.x models (`gemini-3.1-pro-preview`, `gemini-3.8-flash`) are no longer
+  built in; use `carbon`, `hydrogen` or `argon`, or re-add the old models in
+  your own `models.yaml`.
+
 ## [0.5.4] - 2026-11-11
 
 ### Added

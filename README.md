@@ -7,7 +7,7 @@ Command-line chat interface for multiple LLM providers, with streaming output, p
 ## Highlights
 
 - One CLI for multiple providers through `pydantic-ai` (`openai`, `openai-responses`, `anthropic`, `google`, `openrouter`, `moonshotai`, and others you add in YAML).
-- Fast model switching via aliases like `sonnet`, `sol`, `gemini-pro`.
+- Fast model switching via aliases like `sonnet`, `sol`, `carbon`.
 - Chat history with resume/continue flows and an interactive selector that can search, preview, and open chats in your editor (`$EDITOR`).
 - Chat bookmarks with `/bookmark` in-chat plus bookmark/filter controls in the selector.
 - Optional web search and thinking traces when the selected model supports them.
