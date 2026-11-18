@@ -9,6 +9,11 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Changed
+
+- The `astra` and `sol` aliases now point to GPT-6.2 Astra (`gpt-6.2-astra`)
+  and GPT-6.2 Sol (`gpt-6.2-sol`), replacing GPT-6 Astra and GPT-6.1 Sol.
+
 ## [0.6.0] - 2026-11-15
 
 ### Added
