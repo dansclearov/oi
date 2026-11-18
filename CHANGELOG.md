@@ -9,6 +9,8 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-18
+
 ### Changed
 
 - The `astra` and `sol` aliases now point to GPT-6.2 Astra (`gpt-6.2-astra`)
@@ -516,7 +518,8 @@ Initial public release.
 - PyPI packaging metadata (license, classifiers, project URLs).
 - Support for Python 3.10–3.13.
 
-[Unreleased]: https://github.com/dansclearov/oi/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/dansclearov/oi/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/dansclearov/oi/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/dansclearov/oi/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/dansclearov/oi/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/dansclearov/oi/compare/v0.5.2...v0.5.3
