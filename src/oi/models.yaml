@@ -9,6 +9,7 @@ aliases:
   terra: openai-responses/gpt-6.1-terra
   luna: openai-responses/gpt-6-luna
   carbon: google/gemini-4-carbon
+  neon: google/gemini-4-neon
   hydrogen: google/gemini-4-hydrogen
   argon: google/gemini-4-argon
 
@@ -74,6 +75,10 @@ openai-responses:
 
 google:
   gemini-4-carbon:
+    supports_thinking: true
+    supports_search: true
+    supports_vision: true
+  gemini-4-neon:
     supports_thinking: true
     supports_search: true
     supports_vision: true

@@ -9,6 +9,10 @@ config/`models.yaml` format, alias names).
 
 ## [Unreleased]
 
+### Added
+
+- New `neon` alias for Google's Gemini 4 Neon (`gemini-4-neon`).
+
 ## [0.6.1] - 2026-11-18
 
 ### Changed
